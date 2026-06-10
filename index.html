@@ -190,9 +190,9 @@ tr.done-row td{opacity:.5;}
 
 // URL de tu Apps Script desplegado como Web App
 // Después de publicar en Apps Script, pega la URL aquí
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby4Ywz5SRwzOfGMZkqxsLAiLxaNPGxIrRXmWz4KTRn4Sb2Bs8IIdRTFlbTcPQPGGGz5/exec";
+const SCRIPT_URL = "TU_APPS_SCRIPT_URL_AQUI";
 
-// Usuarios — deben coincidir con los del Codigo.gs
+/// Usuarios — deben coincidir con los del Codigo.gs
 const USERS = {
   admin1: { name:"Maybee",       role:"admin",  initials:"MA" },
   admin2: { name:"Alfredo",      role:"admin",  initials:"AL" },
@@ -212,22 +212,28 @@ const USERS = {
  Jacqueline:  { name:"Jacqueline ", role:"worker", initials:"JA", area:"User" },
 };
 
+
+
 // ══════════════════════════════════════════════════════
 </script>
 
 <script>
 // ── API ───────────────────────────────────────────────
 async function api(action, params={}, body=null) {
+  // Apps Script blocks CORS preflight on POST with JSON headers.
+  // Solution: always use GET, encode body as a single "payload" param.
   const url = new URL(SCRIPT_URL);
   url.searchParams.set("action", action);
-  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+  if (body) {
+    url.searchParams.set("payload", JSON.stringify({action, ...body}));
+  }
 
-  const opts = body
-    ? { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({action,...body}) }
-    : { method:"GET" };
-
-  const res  = await fetch(url, opts);
-  const json = await res.json();
+  const res  = await fetch(url.toString(), { method:"GET" });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); }
+  catch(e) { throw new Error("Respuesta inválida del servidor: " + text.slice(0,120)); }
   if (!json.ok) throw new Error(json.error || "Error desconocido");
   return json.data;
 }
