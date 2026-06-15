@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Gestión de Pendientes</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --or:#F97316;--orl:#FFF7ED;--orm:#FDBA74;
+  --nv:#1E3A5F;--nvl:#EEF3FA;--nvm:#2D5F9E;
+  --g0:#fff;--g1:#F8FAFC;--g2:#F1F5F9;--g3:#E2E8F0;
+  --g4:#94A3B8;--g6:#475569;--g8:#1E293B;
+  --ok:#16A34A;--okb:#F0FDF4;
+  --wn:#D97706;--wnb:#FFFBEB;
+  --er:#DC2626;--erb:#FEF2F2;
+  --rd:10px;--sh:0 1px 3px rgba(0,0,0,.07);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--g1);min-height:100vh;font-size:13px;}
+
+/* TOPBAR */
+.bar{background:var(--nv);padding:0 18px;display:flex;align-items:center;justify-content:space-between;height:62px;border-bottom:3px solid var(--or);position:sticky;top:0;z-index:50;}
+.bar-l{display:flex;align-items:center;gap:10px;}
+.tabs{display:flex;gap:3px;}
+.tab{padding:5px 11px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:500;background:transparent;color:rgba(255,255,255,.55);transition:all .15s;}
+.tab:hover{background:rgba(255,255,255,.1);color:#fff;}
+.tab.on{background:var(--or);color:#fff;}
+.bar-r{display:flex;align-items:center;gap:8px;}
+.uinfo{text-align:right;}
+.uname{color:rgba(255,255,255,.9);font-size:12px;font-weight:600;line-height:1.3;}
+.uclock{color:var(--or);font-size:13px;font-weight:700;line-height:1.3;}
+.udate{color:rgba(255,255,255,.45);font-size:10px;line-height:1.3;}
+.av{width:28px;height:28px;border-radius:50%;background:var(--or);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;}
+.av.nv{background:var(--nvm);}
+
+/* LAYOUT */
+.wrap{padding:16px;max-width:1020px;margin:0 auto;}
+
+/* SPINNER */
+.spin-wrap{display:flex;justify-content:center;padding:60px;}
+.spin{width:30px;height:30px;border:3px solid var(--g3);border-top-color:var(--or);border-radius:50%;animation:sp .7s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+
+/* STATS */
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:14px;}
+@media(max-width:560px){.sg{grid-template-columns:repeat(2,1fr);}}
+.sc{background:var(--g0);border:0.5px solid var(--g3);border-radius:var(--rd);padding:11px 13px;}
+.sl{font-size:10px;color:var(--g4);font-weight:600;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;}
+.sv{font-size:21px;font-weight:700;color:var(--nv);}
+.sv.gr{color:var(--ok);}.sv.rd{color:var(--er);}.sv.or{color:var(--or);}
+
+/* ALERT */
+.al{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:var(--rd);font-size:12px;margin-bottom:8px;}
+.al.er{background:var(--erb);border:1px solid #FCA5A5;color:var(--er);}
+.al.wn{background:var(--wnb);border:1px solid #FDE68A;color:var(--wn);}
+
+/* SECTION */
+.sec{display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px;}
+.sec-t{font-size:10px;font-weight:700;color:var(--g4);text-transform:uppercase;letter-spacing:.8px;}
+.empty{padding:20px;text-align:center;color:var(--g4);font-size:12px;background:var(--g0);border:0.5px solid var(--g3);border-radius:var(--rd);}
+
+/* WORKERS GRID */
+.wg{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px;}
+@media(max-width:640px){.wg{grid-template-columns:1fr 1fr;}}
+.wc{background:var(--g0);border:0.5px solid var(--g3);border-radius:var(--rd);padding:12px;cursor:pointer;transition:all .15s;box-shadow:var(--sh);}
+.wc:hover{border-color:var(--or);box-shadow:0 3px 10px rgba(249,115,22,.12);}
+.wi{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
+.wm{display:flex;gap:10px;font-size:11px;color:var(--g6);flex-wrap:wrap;}
+
+/* TABLE */
+.card{background:var(--g0);border:0.5px solid var(--g3);border-radius:var(--rd);box-shadow:var(--sh);overflow:hidden;margin-bottom:10px;}
+.tw{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead tr{background:var(--g1);}
+th{padding:7px 9px;text-align:left;font-size:10px;font-weight:700;color:var(--g4);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--g3);white-space:nowrap;}
+td{padding:8px 9px;border-bottom:0.5px solid var(--g2);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+tr.cr td{opacity:.55;background:var(--g1);}
+
+/* PRIORITY INDICATOR */
+.prio-ovr{border-left:3px solid var(--er);}
+.prio-soon{border-left:3px solid var(--wn);}
+.prio-ok{border-left:3px solid transparent;}
+
+/* BADGES */
+.bg{display:inline-flex;align-items:center;padding:2px 7px;border-radius:9px;font-size:10px;font-weight:700;}
+.bg.pn{background:var(--wnb);color:var(--wn);}
+.bg.pr{background:var(--nvl);color:var(--nv);}
+.bg.dn{background:var(--okb);color:var(--ok);}
+.tg{background:var(--nvl);color:var(--nv);padding:2px 6px;border-radius:7px;font-size:10px;font-weight:600;}
+.by{font-size:10px;color:var(--g4);margin-top:2px;}
+.sup{font-size:10px;color:var(--or);margin-top:2px;}
+
+/* PROGRESS */
+.pb{background:var(--g2);border-radius:3px;height:5px;width:65px;overflow:hidden;}
+.pf{height:100%;border-radius:3px;transition:width .4s;}
+.pp{font-size:10px;color:var(--g4);margin-top:2px;}
+
+/* ACTION EDITOR */
+.ae{display:flex;align-items:center;gap:4px;}
+.sel{font-size:11px;border:0.5px solid var(--g3);border-radius:5px;padding:3px 5px;background:#fff;color:var(--g8);cursor:pointer;}
+.sab{font-size:10px;padding:3px 8px;border-radius:5px;border:none;background:var(--nv);color:#fff;cursor:pointer;font-weight:600;white-space:nowrap;display:none;}
+.sab.show{display:inline-block;}
+.sab:hover{opacity:.85;}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:3px;padding:4px 9px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:600;transition:opacity .15s;white-space:nowrap;}
+.btn:hover{opacity:.82;}
+.btn.or{background:var(--or);color:#fff;}
+.btn.nv{background:var(--nvl);color:var(--nv);}
+.btn.er{background:var(--erb);color:var(--er);}
+.btn.gh{background:transparent;border:1px solid var(--g3);color:var(--g6);}
+.btn.nt{background:var(--wnb);color:var(--wn);border:1px solid var(--orm);}
+.btn.fl{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;}
+.btn-r{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;}
+.nd{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--wn);margin-left:3px;vertical-align:middle;}
+
+/* NOTE */
+.nb{margin-top:5px;background:var(--wnb);border:1px solid #FDE68A;border-radius:7px;padding:6px 8px;}
+.nb textarea{width:100%;border:none;background:transparent;font-size:11px;color:var(--g8);resize:none;min-height:44px;outline:none;font-family:inherit;line-height:1.5;}
+
+/* FILE */
+.fp{margin-top:5px;}
+.fp a{font-size:11px;color:var(--nvm);display:inline-flex;align-items:center;gap:3px;text-decoration:none;}
+.fp a:hover{text-decoration:underline;}
+
+/* DESC RICH */
+.desc-text{font-size:12px;color:var(--g8);font-weight:500;line-height:1.5;}
+.desc-text a{color:var(--nvm);text-decoration:underline;}
+
+/* PROJECTS */
+.pc{background:var(--g0);border:0.5px solid var(--g3);border-radius:var(--rd);margin-bottom:9px;overflow:hidden;box-shadow:var(--sh);}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;cursor:pointer;border-left:4px solid var(--or);}
+.ph:hover{background:var(--g1);}
+.ph.cp{border-left-color:var(--ok);}
+.pt{font-size:13px;font-weight:600;color:var(--nv);}
+.pm{font-size:10px;color:var(--g4);margin-top:2px;}
+.pr{display:flex;align-items:center;gap:10px;}
+.pp2{font-size:17px;font-weight:700;color:var(--or);}
+.pbw{width:70px;background:var(--g2);border-radius:4px;height:6px;overflow:hidden;}
+.pbf{height:100%;border-radius:4px;transition:width .4s;}
+.cv{font-size:16px;color:var(--g4);transition:transform .2s;line-height:1;}
+.cv.op{transform:rotate(90deg);}
+.pbody{padding:0 14px 12px;border-top:1px solid var(--g2);}
+.fhr,.fr{display:grid;grid-template-columns:24px 1fr 130px 95px 125px;gap:5px;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--g2);font-size:12px;}
+.fhr{font-size:10px;font-weight:700;color:var(--g4);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--g3);padding-top:9px;}
+.fr:last-child{border-bottom:none;}
+.fn{width:21px;height:21px;border-radius:50%;background:var(--orl);color:var(--or);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.fn.dn{background:var(--okb);color:var(--ok);}
+
+/* WTABS */
+.wt{display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap;}
+.wtb{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:7px;border:1px solid var(--g3);background:#fff;cursor:pointer;font-size:12px;font-weight:500;color:var(--g6);transition:all .15s;}
+.wtb.on{background:var(--nv);color:#fff;border-color:var(--nv);}
+.wtb:hover:not(.on){border-color:var(--or);color:var(--or);}
+
+/* TOGGLE COMP */
+.tc{background:none;border:1px solid var(--g3);border-radius:7px;padding:5px 11px;font-size:11px;color:var(--g6);cursor:pointer;margin-top:8px;}
+
+/* MODAL */
+.mo{position:fixed;inset:0;background:rgba(15,25,50,.5);display:flex;align-items:center;justify-content:center;z-index:200;padding:14px;}
+.mb{background:#fff;border-radius:14px;padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);}
+.mt{font-size:15px;font-weight:700;color:var(--nv);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
+.xb{background:none;border:none;cursor:pointer;font-size:20px;color:var(--g4);line-height:1;padding:0;}
+.fr2{margin-bottom:10px;}
+.fl2{font-size:11px;font-weight:700;color:var(--g6);margin-bottom:3px;display:block;}
+.fi{width:100%;padding:7px 9px;border:1px solid var(--g3);border-radius:7px;font-size:13px;color:var(--g8);outline:none;font-family:inherit;}
+.fi:focus{border-color:var(--nvm);}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+.sb{width:100%;background:var(--nv);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px;}
+.sb:hover{opacity:.85;}
+
+/* SEARCH */
+.srch{position:relative;margin-bottom:10px;}
+.srch input{width:100%;padding:7px 9px 7px 30px;border:1px solid var(--g3);border-radius:7px;font-size:13px;outline:none;font-family:inherit;}
+.srch::before{content:"🔍";position:absolute;left:9px;top:7px;font-size:12px;}
+.drop{background:#fff;border:1px solid var(--g3);border-radius:7px;max-height:160px;overflow-y:auto;margin-top:2px;}
+.di{padding:7px 10px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;}
+.di:hover{background:var(--g1);}
+.tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;}
+.tag-item{display:inline-flex;align-items:center;gap:4px;background:var(--nvl);color:var(--nv);padding:3px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+.tag-x{cursor:pointer;font-size:13px;line-height:1;}
+
+/* UPLOAD AREA */
+.ua{border:2px dashed var(--g3);border-radius:8px;padding:14px;text-align:center;cursor:pointer;color:var(--g4);font-size:12px;transition:border-color .15s;margin-top:4px;}
+.ua:hover{border-color:var(--or);}
+
+/* TOAST */
+.tst{position:fixed;bottom:14px;right:14px;background:var(--nv);color:#fff;padding:9px 14px;border-radius:9px;font-size:12px;border-left:4px solid var(--or);z-index:300;max-width:270px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:tu .25s ease;}
+@keyframes tu{from{transform:translateY(10px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+
+/* LOGIN */
+.lw{min-height:100vh;background:var(--nv);display:flex;align-items:center;justify-content:center;padding:20px;}
+.lc{background:#fff;border-radius:16px;padding:26px;width:100%;max-width:300px;}
+.ll{width:48px;height:48px;background:var(--nv);border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:18px;margin:0 auto 9px;border-bottom:3px solid var(--or);}
+.lt{text-align:center;font-size:16px;font-weight:700;color:var(--nv);margin-bottom:2px;}
+.ls{text-align:center;font-size:11px;color:var(--g4);margin-bottom:16px;}
+.ub{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1.5px solid var(--g3);border-radius:9px;background:#fff;cursor:pointer;width:100%;margin-bottom:6px;transition:all .15s;text-align:left;}
+.ub:hover{border-color:var(--or);background:var(--orl);}
+</style>
+</head>
+<body>
+<script>
+// ══════════════════════════════════════════
+//  CONFIGURACIÓN — EDITA AQUÍ
+// ══════════════════════════════════════════
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby4Ywz5SRwzOfGMZkqxsLAiLxaNPGxIrRXmWz4KTRn4Sb2Bs8IIdRTFlbTcPQPGGGz5/exec";
+
+// Usuarios (deben coincidir con Codigo.gs)
+const USERS = {
+  maybee:    { name:"Maybee",    role:"admin",  initials:"MY" },
+  alfredo:   { name:"Alfredo",   role:"admin",  initials:"AL" },
+  tamia:     { name:"Tamia",     role:"admin",  initials:"TA" },
+  angela:    { name:"Angela",    role:"worker", initials:"AN", area:"General" },
+  natalia:   { name:"Natalia",   role:"worker", initials:"NA", area:"General" },
+  rosemary:  { name:"Rosemary",  role:"worker", initials:"RO", area:"General" },
+  nirvana:   { name:"Nirvana",   role:"worker", initials:"NI", area:"General" },
+  hannah:    { name:"Hannah",    role:"worker", initials:"HA", area:"General" },
+  milagros:  { name:"Milagros",  role:"worker", initials:"MI", area:"General" },
+  krist:     { name:"Krist",     role:"worker", initials:"KR", area:"General" },
+  joshnell:  { name:"Joshnell",  role:"worker", initials:"JO", area:"General" },
+  yuri:      { name:"Yuri",      role:"worker", initials:"YU", area:"General" },
+  felix:     { name:"Felix",     role:"worker", initials:"FE", area:"General" },
+  alejandro: { name:"Alejandro", role:"worker", initials:"AJ", area:"General" },
+  jacquelin: { name:"Jacquelin", role:"worker", initials:"JA", area:"General" },
+};
+const AREAS = ["Académica","Sistemas","Marketing","Administración","Comunicación","Otro"];
+// ══════════════════════════════════════════
+</script>
+<script>
+// ── API ───────────────────────────────────
+async function api(action, qp={}, body=null) {
+  const u = new URL(SCRIPT_URL);
+  u.searchParams.set("action", action);
+  Object.entries(qp).forEach(([k,v])=>u.searchParams.set(k,v));
+  if(body) u.searchParams.set("payload", encodeURIComponent(JSON.stringify({action,...body})));
+  const r = await fetch(u.toString());
+  const t = await r.text();
+  let j; try{j=JSON.parse(t);}catch(e){throw new Error("Respuesta inválida: "+t.slice(0,80));}
+  if(!j.ok) throw new Error(j.error||"Error");
+  return j.data;
+}
+
+// Compress image then upload via POST text/plain (avoids CORS preflight)
+async function apiUpload(tareaId, proyId, file) {
+  // Step 1: compress if image
+  const compressed = await compressFile(file);
+  // Step 2: convert to base64
+  const base64 = await toBase64(compressed);
+  const payload = JSON.stringify({
+    action:"uploadFile",
+    tareaId: tareaId||"",
+    proyId:  proyId||"",
+    filename: file.name,
+    base64,
+    mimeType: compressed.type||file.type
+  });
+  // Step 3: POST with text/plain — no preflight, Apps Script reads postData.contents
+  const r = await fetch(SCRIPT_URL, {
+    method: "POST",
+    body: payload,
+    headers: {"Content-Type":"text/plain;charset=utf-8"}
+  });
+  const t = await r.text();
+  let j; try{j=JSON.parse(t);}catch(e){throw new Error("Respuesta inválida del servidor");}
+  if(!j.ok) throw new Error(j.error||"Error al subir archivo");
+  return j.data;
+}
+
+function toBase64(file) {
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>res(e.target.result.split(",")[1]);
+    r.onerror=()=>rej(new Error("Error leyendo archivo"));
+    r.readAsDataURL(file);
+  });
+}
+
+function compressFile(file) {
+  // Only compress images, pass other files through
+  if(!file.type.startsWith("image/")) return Promise.resolve(file);
+  return new Promise((res,rej)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 900; // max dimension px
+      let w=img.width, h=img.height;
+      if(w>MAX||h>MAX) {
+        if(w>h){ h=Math.round(h*MAX/w); w=MAX; }
+        else   { w=Math.round(w*MAX/h); h=MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width=w; canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      canvas.toBlob(blob=>{
+        if(!blob) { res(file); return; }
+        res(new File([blob], file.name, {type:"image/jpeg"}));
+      }, "image/jpeg", 0.75);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); res(file); };
+    img.src = url;
+  });
+}
+
+// ── HELPERS ───────────────────────────────
+const $  = id => document.getElementById(id);
+const qp = n  => new URLSearchParams(window.location.search).get(n);
+const genUid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const bool = v => v===true||v==="TRUE"||v==="true";
+const toArr = v => { if(!v)return[]; if(Array.isArray(v))return v.filter(Boolean); return String(v).split(",").map(s=>s.trim()).filter(Boolean); };
+const uname = id => USERS[id]?.name||id;
+const anames = arr => toArr(arr).map(uname).join(", ");
+
+function parseDate(s) {
+  // Handles: "2025-06-10", "10/06/2025", "06/10/2025", Date objects, serial numbers from Sheets
+  if(!s) return null;
+  if(s instanceof Date) return s;
+  const str = String(s).trim();
+  if(!str || str==="—") return null;
+  // ISO format YYYY-MM-DD
+  if(/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str+"T12:00:00");
+  // DD/MM/YYYY
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+    const [d,m,y]=str.split("/"); return new Date(`${y}-${m}-${d}T12:00:00`);
+  }
+  // MM/DD/YYYY
+  if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+    const parts=str.split("/"); return new Date(`${parts[2]}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}T12:00:00`);
+  }
+  // Google Sheets serial number (days since Dec 30 1899)
+  if(/^\d+$/.test(str)) {
+    const d=new Date(1899,11,30); d.setDate(d.getDate()+Number(str)); return d;
+  }
+  const d=new Date(str); return isNaN(d)?null:d;
+}
+function fmtDate(s) {
+  const d=parseDate(s); if(!d) return "—";
+  return d.toLocaleDateString("es-PE",{day:"2-digit",month:"short",year:"2-digit"});
+}
+function dSt(s) {
+  const d=parseDate(s); if(!d) return "ok";
+  const diff=Math.round((d-new Date())/86400000);
+  return diff<0?"ovr":diff<=1?"soon":"ok";
+}
+function dHtml(s) {
+  const st=dSt(s);
+  if(st==="ovr")  return`<span style="color:var(--er);font-weight:600;">⚠️ ${fmtDate(s)}</span>`;
+  if(st==="soon") return`<span style="color:var(--wn);font-weight:600;">🔔 ${fmtDate(s)}</span>`;
+  return`<span style="color:var(--g6);">${fmtDate(s)}</span>`;
+}
+function pct(a) { return a==="done"?100:a==="progress"?50:0; }
+function ppct(proj) {
+  if(!proj.phases||!proj.phases.length) return 0;
+  return Math.round(proj.phases.filter(f=>f.action==="done").length/proj.phases.length*100);
+}
+function sortTasks(list) {
+  const pri = t => { const s=dSt(t.dueDate); return s==="ovr"?0:s==="soon"?1:2; };
+  return [...list].sort((a,b)=>pri(a)-pri(b)||(new Date(a.dueDate||"9999")-new Date(b.dueDate||"9999")));
+}
+function rowPrioClass(t) {
+  const s=dSt(t.dueDate);
+  return s==="ovr"?"prio-ovr":s==="soon"?"prio-soon":"prio-ok";
+}
+function toast(m) {
+  document.querySelectorAll(".tst").forEach(e=>e.remove());
+  const el=document.createElement("div");
+  el.className="tst"; el.textContent=m;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),4000);
+}
+function descHtml(t) {
+  if(!t) return "";
+  // Auto-link URLs
+  return t.replace(/https?:\/\/[^\s]+/g, u=>`<a href="${u}" target="_blank">${u}</a>`);
+}
+
+// ── STATE ─────────────────────────────────
+let S = {
+  uid:null, user:null,
+  tareas:[], proyectos:[], conteos:[],
+  tab:"tasks", adminWView:"overview",
+  selW:null, showComp:false,
+  expProj:{}, expNote:{},
+  pendAct:{}, pendPhase:{},
+  modal:null,
+  // modal assign state
+  assignSearch:"", assignSelected:[],
+};
+
+// ── BOOT ──────────────────────────────────
+async function boot() {
+  const id = qp("user");
+  if(!id||!USERS[id]){ renderLogin(); return; }
+  S.uid=id; S.user=USERS[id];
+  S.selW = Object.keys(USERS).find(k=>USERS[k].role==="worker");
+  document.body.innerHTML=`<div class="spin-wrap"><div class="spin"></div></div>`;
+  try {
+    const d = await api("init",{userId:id});
+    S.tareas    = (d.tareas||[]).map(t=>({...t,assignedTo:toArr(t.assignedTo),completed:bool(t.completed)}));
+    S.proyectos = (d.proyectos||[]).map(p=>({...p,assignedTo:toArr(p.assignedTo),phases:p.phases||[],completed:bool(p.completed)}));
+    S.conteos   = d.conteos||[];
+  } catch(e) {
+    document.body.innerHTML=`<div style="padding:40px;text-align:center;color:var(--er);">
+      <div style="font-size:28px;margin-bottom:10px;">⚠️</div>
+      <b>${e.message}</b><br><span style="font-size:11px;color:var(--g4);margin-top:6px;display:block;">Verifica SCRIPT_URL</span></div>`;
+    return;
+  }
+  render();
+}
+
+async function reload() {
+  try {
+    const d = await api("init",{userId:S.uid});
+    S.tareas    = (d.tareas||[]).map(t=>({...t,assignedTo:toArr(t.assignedTo),completed:bool(t.completed)}));
+    S.proyectos = (d.proyectos||[]).map(p=>({...p,assignedTo:toArr(p.assignedTo),phases:p.phases||[],completed:bool(p.completed)}));
+    S.conteos   = d.conteos||[];
+  } catch(e) { toast("Error al cargar: "+e.message); }
+}
+
+// ── LOGIN ─────────────────────────────────
+function renderLogin() {
+  document.body.innerHTML=`<div class="lw"><div class="lc">
+    <div class="ll">G</div>
+    <div class="lt">Gestión de Pendientes</div>
+    <div class="ls">Selecciona tu perfil</div>
+    ${Object.entries(USERS).map(([id,u])=>`
+      <button class="ub" onclick="window.location.search='?user=${id}'">
+        <div class="av ${u.role==='admin'?'nv':''}">${u.initials}</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--nv);">${u.name}</div>
+          <div style="font-size:10px;color:var(--g4);">${u.role==='admin'?'👑 Admin':'👷 '+u.area}</div>
+        </div>
+      </button>`).join("")}
+  </div></div>`;
+}
+
+// ── RENDER ────────────────────────────────
+function render() {
+  const isAdmin = S.user.role==="admin";
+  document.body.innerHTML=`
+    ${topbar()}
+    <div class="wrap">${isAdmin?renderAdmin():renderWorker()}</div>
+    ${S.modal?renderModal():""}
+  `;
+  bindAll();
+  restoreNotes();
+  startClock();
+}
+
+function startClock() {
+  // Update immediately then every second
+  updateClock();
+  if(window._clockInterval) clearInterval(window._clockInterval);
+  window._clockInterval = setInterval(updateClock, 1000);
+}
+
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  const clockEl = document.getElementById('clock-display');
+  if(clockEl) clockEl.textContent = h+':'+m+':'+s;
+  const days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const dateStr = days[now.getDay()]+', '+now.getDate()+' '+months[now.getMonth()]+' '+now.getFullYear();
+  const dateEl = document.getElementById('date-display');
+  if(dateEl) dateEl.textContent = dateStr;
+}
+
+function topbar() {
+  const a = S.user.role==="admin";
+  return`<div class="bar">
+    <div class="bar-l">
+      <div class="tabs">
+        ${a?`
+          <button class="tab ${S.adminWView==='overview'?'on':''}" onclick="setAV('overview')">Resumen</button>
+          <button class="tab ${S.adminWView==='team'?'on':''}" onclick="setAV('team')">Equipo</button>
+        `:`
+          <button class="tab ${S.tab==='tasks'?'on':''}" onclick="setTab('tasks')">Mis tareas</button>
+          <button class="tab ${S.tab==='projects'?'on':''}" onclick="setTab('projects')">Proyectos</button>
+        `}
+      </div>
+    </div>
+    <div class="bar-r">
+      <div class="uinfo">
+        <div class="uname">${S.user.name}</div>
+        <div class="uclock" id="clock-display">--:--:--</div>
+        <div class="udate" id="date-display">--</div>
+      </div>
+      <div class="av ${a?'nv':''}">${S.user.initials}</div>
+    </div>
+  </div>`;
+}
+
+// ─── ADMIN ────────────────────────────────
+function renderAdmin() {
+  return S.adminWView==="overview" ? adminOverview() : adminTeam();
+}
+
+function adminOverview() {
+  const active  = S.tareas.filter(t=>!t.completed);
+  const comp    = S.tareas.filter(t=>t.completed);
+  const ovr     = active.filter(t=>dSt(t.dueDate)==="ovr");
+  const soon    = active.filter(t=>dSt(t.dueDate)==="soon");
+  const workers = Object.entries(USERS);
+  return`
+    <div class="sg">
+      <div class="sc"><div class="sl">Tareas activas</div><div class="sv">${active.length}</div></div>
+      <div class="sc"><div class="sl">Completadas</div><div class="sv gr">${comp.length}</div></div>
+      <div class="sc"><div class="sl">Vencidas</div><div class="sv rd">${ovr.length}</div></div>
+      <div class="sc"><div class="sl">Proyectos</div><div class="sv or">${S.proyectos.length}</div></div>
+    </div>
+    ${ovr.length?`<div class="al er">⚠️ ${ovr.length} tarea(s) vencida(s) en el equipo.</div>`:""}
+    ${soon.length?`<div class="al wn">🔔 ${soon.length} tarea(s) vencen hoy o mañana.</div>`:""}
+    <div class="sec">
+      <span class="sec-t">Todo el equipo</span>
+      <button class="btn or" onclick="openModal('assign','new','task')">+ Nueva tarea / proyecto</button>
+    </div>
+    <div class="wg">
+      ${workers.map(([id,u])=>{
+        const wA=S.tareas.filter(t=>toArr(t.assignedTo).includes(id)&&!t.completed);
+        const wP=S.proyectos.filter(p=>toArr(p.assignedTo).includes(id));
+        const wO=wA.filter(t=>dSt(t.dueDate)==="ovr");
+        const ct=S.conteos.find(c=>c.userId===id);
+        return`<div class="wc" onclick="pickWorker('${id}')">
+          <div class="wi">
+            <div class="av ${u.role==='admin'?'nv':''}">${u.initials}</div>
+            <div style="flex:1;">
+              <div style="font-weight:700;color:var(--nv);font-size:12px;">${u.name}</div>
+              <div style="font-size:10px;color:var(--g4);">${u.role==='admin'?'Admin':u.area}</div>
+            </div>
+            ${wO.length?`<span class="bg" style="background:var(--erb);color:var(--er);">${wO.length}⚠️</span>`:""}
+          </div>
+          <div class="wm">
+            <span>📋 ${wA.length}</span>
+            <span>✅ ${ct?.tareasCompletadas||0}</span>
+            <span>📁 ${wP.length}</span>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="sec"><span class="sec-t">Todas las tareas activas</span></div>
+    ${taskTable(sortTasks(active),true)}
+    <div class="sec" style="margin-top:16px;"><span class="sec-t">Proyectos</span></div>
+    ${projCards(S.proyectos,true)}
+    ${comp.length?`
+      <button class="tc" onclick="toggleComp()">${S.showComp?"▲":"▼"} Completadas esta semana (${comp.length})</button>
+      ${S.showComp?taskTable(comp,true,true):""}
+    `:""}`;
+}
+
+function adminTeam() {
+  const workers = Object.entries(USERS);
+  const u = USERS[S.selW]||{};
+  const wA = sortTasks(S.tareas.filter(t=>toArr(t.assignedTo).includes(S.selW)&&!t.completed));
+  const wC = S.tareas.filter(t=>toArr(t.assignedTo).includes(S.selW)&&t.completed);
+  const wP = S.proyectos.filter(p=>toArr(p.assignedTo).includes(S.selW));
+  const ct = S.conteos.find(c=>c.userId===S.selW);
+  return`
+    <div class="wt">
+      ${workers.map(([id,wu])=>`
+        <button class="wtb ${S.selW===id?'on':''}" onclick="pickWorker('${id}')">
+          <div class="av" style="width:20px;height:20px;font-size:9px;background:${S.selW===id?'rgba(255,255,255,.25)':'var(--orl)'};color:${S.selW===id?'#fff':'var(--or)'};">${wu.initials}</div>
+          ${wu.name}
+        </button>`).join("")}
+    </div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:7px;">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--nv);">${u.name||""}</div>
+        <div style="font-size:11px;color:var(--g4);">${wA.length} activas · ${ct?.tareasCompletadas||0} completadas · ${wP.length} proyectos</div>
+      </div>
+      <button class="btn or" onclick="openModal('assign','new_w','task')">+ Asignar</button>
+    </div>
+    <div class="sec"><span class="sec-t">Tareas activas</span></div>
+    ${taskTable(wA,true)}
+    <div class="sec" style="margin-top:14px;"><span class="sec-t">Proyectos</span></div>
+    ${projCards(wP,true)}
+    ${wC.length?`
+      <button class="tc" onclick="toggleComp()">${S.showComp?"▲":"▼"} Completadas esta semana (${wC.length})</button>
+      ${S.showComp?taskTable(wC,true,true):""}
+    `:""}`;
+}
+
+// ── WORKER ────────────────────────────────
+function renderWorker() {
+  const myT  = sortTasks(S.tareas.filter(t=>toArr(t.assignedTo).includes(S.uid)&&!t.completed));
+  const myC  = S.tareas.filter(t=>toArr(t.assignedTo).includes(S.uid)&&t.completed);
+  const myP  = S.proyectos.filter(p=>toArr(p.assignedTo).includes(S.uid));
+  const ovr  = myT.filter(t=>dSt(t.dueDate)==="ovr");
+  const soon = myT.filter(t=>dSt(t.dueDate)==="soon");
+  const ct   = S.conteos.find(c=>c.userId===S.uid);
+  return`
+    ${ovr.length?`<div class="al er">⚠️ Tienes ${ovr.length} tarea(s) vencida(s).</div>`:""}
+    ${soon.length?`<div class="al wn">🔔 ${soon.length} vencen hoy o mañana.</div>`:""}
+    <div class="sg" style="grid-template-columns:repeat(3,1fr);">
+      <div class="sc"><div class="sl">Mis tareas</div><div class="sv">${myT.length}</div></div>
+      <div class="sc"><div class="sl">Vencidas</div><div class="sv rd">${ovr.length}</div></div>
+      <div class="sc"><div class="sl">Total completadas</div><div class="sv gr">${ct?.tareasCompletadas||0}</div></div>
+    </div>
+    ${S.tab==="tasks"?`
+      <div class="sec">
+        <span class="sec-t">Mis tareas activas (${myT.length})</span>
+        <button class="btn or" onclick="openModal('selfAssign','new','task')">+ Nueva tarea</button>
+      </div>
+      ${myT.length?taskTable(myT,false):`<div class="empty">🎉 No tienes tareas activas</div>`}
+      ${myC.length?`
+        <button class="tc" onclick="toggleComp()">${S.showComp?"▲":"▼"} Completadas esta semana (${myC.length})</button>
+        ${S.showComp?taskTable(myC,false,true):""}
+      `:""}
+    `:`
+      <div class="sec">
+        <span class="sec-t">Mis proyectos (${myP.length})</span>
+        <button class="btn or" onclick="openModal('selfAssign','new','project')">+ Nuevo proyecto</button>
+      </div>
+      ${myP.length?projCards(myP,false):`<div class="empty">No tienes proyectos asignados.</div>`}
+      ${myC.length?`
+        <button class="tc" onclick="toggleComp()">${S.showComp?"▲":"▼"} Completadas esta semana (${myC.length})</button>
+        ${S.showComp?taskTable(myC,false,true):""}
+      `:""}
+    `}`;
+}
+
+// ── TASK TABLE ────────────────────────────
+function taskTable(list,isAdmin,isComp=false) {
+  if(!list.length) return`<div class="empty">Sin tareas.</div>`;
+  return`<div class="card"><div class="tw"><table>
+    <thead><tr>
+      <th>Área / Tema</th><th>Descripción</th>
+      <th>${isAdmin?"Asignado a":"Asignado por"}</th>
+      <th>Fecha</th><th>Acción</th><th>%</th>
+    </tr></thead>
+    <tbody>
+    ${list.map(t=>{
+      const by=t.assignedBy?USERS[t.assignedBy]:null;
+      const p=pct(t.action);
+      const hasN=t.note&&t.note.trim()!=="";
+      const nOpen=S.expNote[t.id];
+      const hasF=t.fileUrl&&t.fileUrl.trim()!=="";
+      const pa=S.pendAct[t.id];
+      const assigned=toArr(t.assignedTo);
+      return`<tr class="${isComp?"cr":""} ${rowPrioClass(t)}">
+        <td>
+          <div style="font-size:10px;color:var(--g6);">${t.area||"—"}</div>
+          <span class="tg" style="margin-top:2px;display:inline-block;">${t.topic||"—"}</span>
+        </td>
+        <td style="min-width:160px;">
+          <div class="desc-text">${descHtml(t.desc)}</div>
+          ${hasF?`<div class="fp"><a href="${t.fileUrl}" target="_blank">📎 Ver adjunto</a></div>`:""}
+          ${!isComp?`<div class="btn-r">
+            ${isAdmin?`
+              <button class="btn nv" onclick="openModal('editTask','${t.id}',null)">✏️</button>
+              <button class="btn er" onclick="doDelTask('${t.id}')">🗑️</button>
+            `:`
+              <button class="btn gh" onclick="openModal('support','${t.id}',null)">👥</button>
+              <button class="btn nv" onclick="openModal('editTask','${t.id}',null)">✏️</button>
+              <button class="btn nt" onclick="toggleNote('${t.id}')">📝${hasN?`<span class="nd"></span>`:""}</button>
+              <button class="btn fl" onclick="openModal('file','${t.id}',null)">📎${hasF?"✓":""}</button>
+            `}
+          </div>`:""}
+          ${!isAdmin&&!isComp&&nOpen?`
+            <div class="nb">
+              <textarea data-nid="${t.id}" placeholder="Escribe tu nota aquí..."></textarea>
+              <div style="display:flex;gap:4px;margin-top:3px;">
+                <button class="btn nt" style="font-size:10px;" onclick="doSaveNote('${t.id}')">💾 Guardar</button>
+                <button class="btn gh" style="font-size:10px;" onclick="toggleNote('${t.id}')">✕</button>
+              </div>
+            </div>
+          `:""}
+        </td>
+        <td>
+          ${isAdmin
+            ?`<div style="font-size:11px;color:var(--g8);">${anames(t.assignedTo)}</div>`
+            :`<div class="by">${by?.name||"—"}</div>`
+          }
+          ${t.support?`<div class="sup">👤 ${uname(t.support)}</div>`:""}
+        </td>
+        <td style="white-space:nowrap;font-size:11px;">${dHtml(t.dueDate)}</td>
+        <td>
+          ${isComp?`<span class="bg dn">✓ Listo</span>`:`
+            <div class="ae">
+              <select class="sel" data-tid="${t.id}" onchange="setPendAct('${t.id}',this.value)">
+                <option value="pending"  ${t.action==="pending" ?"selected":""}>Pendiente</option>
+                <option value="progress" ${t.action==="progress"?"selected":""}>Avanzado</option>
+                <option value="done"     ${t.action==="done"    ?"selected":""}>Finalizado</option>
+              </select>
+              <button class="sab ${pa&&pa!==t.action?'show':''}" data-sab="${t.id}" onclick="doSaveAct('${t.id}')">Guardar</button>
+            </div>
+          `}
+        </td>
+        <td>
+          <div class="pb"><div class="pf" style="width:${p}%;background:${p===100?'var(--ok)':p===50?'var(--or)':'var(--g4)'};"></div></div>
+          <div class="pp">${p}%</div>
+        </td>
+      </tr>`;
+    }).join("")}
+    </tbody></table></div></div>`;
+}
+
+// ── PROJECTS ──────────────────────────────
+function projCards(list,isAdmin) {
+  if(!list.length) return`<div class="empty">Sin proyectos.</div>`;
+  return list.map(proj=>{
+    const p   = ppct(proj);
+    const exp = S.expProj[proj.id];
+    const by  = proj.assignedBy?USERS[proj.assignedBy]:null;
+    return`<div class="pc">
+      <div class="ph ${proj.completed?"cp":""}" onclick="toggleProj('${proj.id}')">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+            <span class="pt">${proj.name}</span>
+            ${proj.completed?'<span class="bg dn">Completado</span>':""}
+          </div>
+          <div class="pm">${proj.area}${isAdmin?" · "+anames(proj.assignedTo):""} · ${(proj.phases||[]).length} fase${(proj.phases||[]).length!==1?"s":""}</div>
+          ${by?`<div class="pm">Por: ${by.name}</div>`:""}
+        </div>
+        <div class="pr">
+          <div style="text-align:right;">
+            <div class="pp2">${p}%</div>
+            <div class="pbw"><div class="pbf" style="width:${p}%;background:${p===100?'var(--ok)':'var(--or)'}"></div></div>
+          </div>
+          <span class="cv ${exp?"op":""}">›</span>
+        </div>
+      </div>
+      ${exp?`<div class="pbody">
+        <div class="fhr"><div></div><div>Fase</div><div>Descripción</div><div>Fecha</div><div>Estado</div></div>
+        ${(proj.phases||[]).map((ph,i)=>{
+          const pk=proj.id+"_"+ph.id;
+          const pp2=S.pendPhase[pk];
+          return`<div class="fr">
+            <div class="fn ${ph.action==="done"?"dn":""}">${ph.action==="done"?"✓":(i+1)}</div>
+            <div style="font-weight:600;color:var(--nv);font-size:12px;">${ph.name}
+              ${isAdmin?`<button class="btn nv" style="font-size:9px;padding:2px 5px;margin-left:3px;" onclick="openModal('editPhase','${proj.id}:${ph.id}',null)">✏️</button>`:""}
+            </div>
+            <div style="font-size:11px;color:var(--g6);">${ph.desc||""}</div>
+            <div style="font-size:11px;">${dHtml(ph.dueDate)}</div>
+            <div>
+              <div class="ae">
+                <select class="sel" style="width:90px;" data-phk="${pk}" onchange="setPendPhase('${pk}',this.value)">
+                  <option value="pending"  ${ph.action==="pending" ?"selected":""}>Pendiente</option>
+                  <option value="progress" ${ph.action==="progress"?"selected":""}>Avanzado</option>
+                  <option value="done"     ${ph.action==="done"    ?"selected":""}>Finalizado</option>
+                </select>
+                <button class="sab ${pp2&&pp2!==ph.action?'show':''}" data-phk="${pk}" onclick="doSavePhase('${proj.id}','${ph.id}','${pk}')">Guardar</button>
+              </div>
+            </div>
+          </div>`;
+        }).join("")}
+        <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;">
+          <button class="btn or" onclick="openModal('editPhase','${proj.id}:new',null)">+ Fase</button>
+          <button class="btn nv" onclick="openModal('editProject','${proj.id}',null)">✏️ Editar proyecto</button>
+          ${isAdmin?`<button class="btn er" onclick="doDelProj('${proj.id}')">🗑️ Eliminar</button>`:""}
+        </div>
+      </div>`:""}
+    </div>`;
+  }).join("");
+}
+
+// ── MODAL ─────────────────────────────────
+function openModal(type,id,extra) {
+  S.modal={type,id,extra};
+  if(type==="assign"||type==="selfAssign") {
+    S.assignSearch=""; S.assignSelected=[];
+    // Pre-select current worker if admin team view
+    if(type==="assign"&&S.adminWView==="team"&&S.selW) S.assignSelected=[S.selW];
+  }
+  render();
+}
+function closeModal(){ removePasteHandler(); S_assignFile=null; S.modal=null; render(); }
+
+function renderModal() {
+  const {type,id,extra}=S.modal;
+  const isAdmin=S.user.role==="admin";
+  let title="",body="";
+
+  // ── ASSIGN (admin) or SELF-ASSIGN (worker) ──
+  if(type==="assign"||type==="selfAssign") {
+    const isSelf=type==="selfAssign";
+    const isTask=extra==="task"||(S.modal._type&&S.modal._type==="task")||true;
+    title=isSelf?"Nueva tarea / proyecto":"Asignar tarea / proyecto";
+    const typeToggle=S.modal._itemType||"task";
+    body=`
+      <div style="display:flex;gap:6px;margin-bottom:12px;">
+        <button class="btn ${typeToggle==='task'?'or':'gh'}" onclick="setModalType('task')">📋 Tarea</button>
+        <button class="btn ${typeToggle==='project'?'or':'gh'}" onclick="setModalType('project')">📁 Proyecto</button>
+      </div>
+      ${!isSelf?`
+        <div class="fr2">
+          <label class="fl2">Asignar a (puedes elegir varios)</label>
+          <div class="srch">
+            <input id="assign-srch" placeholder="Buscar persona..." oninput="filterAssign(this.value)" autocomplete="off">
+          </div>
+          <div id="assign-drop" class="drop" style="${S.assignSearch?'':'display:none'}"></div>
+          <div class="tags" id="assign-tags">
+            ${S.assignSelected.map(uid=>`
+              <span class="tag-item">${uname(uid)}<span class="tag-x" onclick="removeAssign('${uid}')">×</span></span>
+            `).join("")}
+          </div>
+        </div>
+      `:""}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
+        <div class="fr2">
+          <label class="fl2">Área</label>
+          <select class="fi" id="f-area">
+            <option value="">Selecciona...</option>
+            ${AREAS.map(a=>`<option value="${a}">${a}</option>`).join("")}
+          </select>
+        </div>
+        <div class="fr2">
+          <label class="fl2">Tema</label>
+          <input class="fi" id="f-topic" placeholder="Ej: Q10">
+        </div>
+      </div>
+      <div class="fr2">
+        <label class="fl2">Descripción / Links (opcional)</label>
+        <textarea class="fi" id="f-desc" rows="3" placeholder="Descripción, pega links aquí..."></textarea>
+      </div>
+      <div class="fr2">
+        <label class="fl2">Fecha límite</label>
+        <input class="fi" type="date" id="f-date">
+      </div>
+      ${typeToggle==="project"?`
+        <div class="fr2">
+          <label class="fl2">Fases (opcional — una por línea)</label>
+          <textarea class="fi" id="f-phases" rows="3" placeholder="Fase 1: Diseño&#10;Fase 2: Desarrollo&#10;Fase 3: Testing"></textarea>
+        </div>
+      `:""}
+      <div class="fr2" style="margin-top:4px;">
+        <label class="fl2">Adjunto (opcional)</label>
+        <div class="ua" id="paste-zone-assign" onclick="$('f-assign-file').click()"
+          style="min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;">
+          <div>📎 Adjuntar archivo o <b>pegar screenshot</b></div>
+          <div style="font-size:10px;">Ctrl+V / Cmd+V • máx. 4MB</div>
+          <div id="paste-preview-assign" style="margin-top:4px;"></div>
+        </div>
+        <input type="file" id="f-assign-file" accept="image/*,application/pdf" style="display:none;" onchange="setAssignFile(this)">
+      </div>
+      <button class="sb" onclick="doSaveNew('${isSelf}')">Crear ${typeToggle==="task"?"tarea":"proyecto"}</button>`;
+    setTimeout(()=>initPasteZoneAssign('paste-zone-assign'),100);
+  }
+
+  // ── EDIT TASK ──
+  if(type==="editTask") {
+    const t=S.tareas.find(x=>x.id===id);
+    title="Editar tarea";
+    body=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
+        <div class="fr2"><label class="fl2">Área</label>
+          <select class="fi" id="f-area">
+            ${AREAS.map(a=>`<option value="${a}" ${t?.area===a?"selected":""}>${a}</option>`).join("")}
+          </select>
+        </div>
+        <div class="fr2"><label class="fl2">Tema</label><input class="fi" id="f-topic" value="${t?.topic||""}"></div>
+      </div>
+      <div class="fr2"><label class="fl2">Descripción</label>
+        <textarea class="fi" id="f-desc" rows="3">${t?.desc||""}</textarea>
+      </div>
+      <div class="fr2"><label class="fl2">Fecha límite</label><input class="fi" type="date" id="f-date" value="${t?.dueDate||""}"></div>
+      <button class="sb" onclick="doEditTask('${id}')">Guardar cambios</button>`;
+  }
+
+  // ── EDIT PROJECT ──
+  if(type==="editProject") {
+    const proj=S.proyectos.find(p=>p.id===id);
+    title="Editar proyecto";
+    body=`
+      <div class="fr2"><label class="fl2">Nombre del proyecto</label><input class="fi" id="f-pname" value="${proj?.name||""}"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
+        <div class="fr2"><label class="fl2">Área</label>
+          <select class="fi" id="f-parea">
+            ${AREAS.map(a=>`<option value="${a}" ${proj?.area===a?"selected":""}>${a}</option>`).join("")}
+          </select>
+        </div>
+        <div class="fr2"><label class="fl2">Fecha límite</label><input class="fi" type="date" id="f-pdate" value="${proj?.dueDate||""}"></div>
+      </div>
+      <div class="fr2"><label class="fl2">Descripción</label>
+        <textarea class="fi" id="f-pdesc" rows="2">${proj?.desc||""}</textarea>
+      </div>
+      <button class="sb" onclick="doEditProject('${id}')">Guardar cambios</button>`;
+  }
+
+  // ── EDIT PHASE ──
+  if(type==="editPhase") {
+    const[projId,phId]=id.split(":");
+    const proj=S.proyectos.find(p=>p.id===projId);
+    const ph=phId!=="new"?(proj?.phases||[]).find(p=>p.id===phId):null;
+    title=ph?"Editar fase":"Nueva fase";
+    body=`
+      <div class="fr2"><label class="fl2">Nombre</label><input class="fi" id="f-phname" value="${ph?.name||""}" placeholder="Ej: Diseño UX"></div>
+      <div class="fr2"><label class="fl2">Descripción</label><input class="fi" id="f-phdesc" value="${ph?.desc||""}" placeholder="¿Qué incluye?"></div>
+      <div class="fr2"><label class="fl2">Fecha límite</label><input class="fi" type="date" id="f-phdate" value="${ph?.dueDate||""}"></div>
+      <button class="sb" onclick="doSavePhaseEdit('${projId}','${phId}')">${ph?"Guardar":"Agregar"}</button>`;
+  }
+
+  // ── SUPPORT ──
+  if(type==="support") {
+    const t=S.tareas.find(x=>x.id===id);
+    title="Asignar apoyo";
+    body=`
+      <p style="font-size:12px;color:var(--g6);margin-bottom:10px;">El colaborador recibirá un correo.</p>
+      <div class="fr2"><label class="fl2">Colaborador</label>
+        <select class="fi" id="f-sup">
+          <option value="">Sin apoyo</option>
+          ${Object.entries(USERS).filter(([uid])=>uid!==S.uid).map(([uid,u])=>`
+            <option value="${uid}" ${t?.support===uid?"selected":""}>${u.name}</option>`).join("")}
+        </select>
+      </div>
+      <button class="sb" onclick="doSaveSupport('${id}')">Asignar 📧</button>`;
+  }
+
+  // ── FILE ──
+  if(type==="file") {
+    const t=S.tareas.find(x=>x.id===id);
+    const hasF=t?.fileUrl&&t.fileUrl.trim()!=="";
+    title="Adjunto de tarea";
+    body=`
+      <p style="font-size:12px;color:var(--g6);margin-bottom:8px;">Adjunta una imagen o PDF. Se borrará al completar la tarea.</p>
+      ${hasF?`
+        <div style="margin-bottom:10px;text-align:center;">
+          <a href="${t.fileUrl}" target="_blank" class="btn nv">🔗 Ver en Drive</a>
+          <button class="btn er" style="margin-left:6px;" onclick="doDelFile('${id}','${t.fileId}',null)">🗑️ Quitar</button>
+        </div>
+      `:""}
+      <div class="ua" id="paste-zone-task" onclick="$('f-file').click()"
+        style="min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
+        <div>📎 Haz clic o <b>pega un screenshot (Ctrl+V)</b></div>
+        <div style="font-size:10px;color:var(--g4);">Imagen, PDF — máx. 4MB</div>
+        <div id="paste-preview"></div>
+      </div>
+      <input type="file" id="f-file" accept="image/*,application/pdf" style="display:none;" onchange="doUpload('${id}',null,this)">`;
+    setTimeout(()=>initPasteZone('paste-zone-task','${id}',null),100);
+  }
+
+  return`<div class="mo" onclick="if(event.target===this)closeModal()">
+    <div class="mb">
+      <div class="mt">${title}<button class="xb" onclick="closeModal()">✕</button></div>
+      ${body}
+    </div>
+  </div>`;
+}
+
+// ── MODAL ASSIGN HELPERS ──────────────────
+function setModalType(t) { S.modal._itemType=t; render(); }
+
+function filterAssign(val) {
+  S.assignSearch=val;
+  const drop=$("assign-drop");
+  if(!drop) return;
+  if(!val.trim()){ drop.style.display="none"; return; }
+  const matches=Object.entries(USERS)
+    .filter(([uid,u])=>u.name.toLowerCase().includes(val.toLowerCase())&&!S.assignSelected.includes(uid));
+  drop.style.display=matches.length?"block":"none";
+  drop.innerHTML=matches.map(([uid,u])=>`
+    <div class="di" onclick="addAssign('${uid}')">
+      <div class="av" style="width:22px;height:22px;font-size:9px;background:var(--${u.role==='admin'?'nvm':'or'});color:#fff;">${u.initials}</div>
+      ${u.name} <span style="font-size:10px;color:var(--g4);margin-left:4px;">${u.role==='admin'?'Admin':u.area}</span>
+    </div>`).join("");
+}
+
+function addAssign(uid) {
+  if(!S.assignSelected.includes(uid)) S.assignSelected.push(uid);
+  S.assignSearch=""; render();
+}
+function removeAssign(uid) { S.assignSelected=S.assignSelected.filter(x=>x!==uid); render(); }
+
+// ── SAVE NEW (task or project) ────────────
+async function doSaveNew(isSelf) {
+  const type   = S.modal._itemType||"task";
+  const area   = $("f-area")?.value||"";
+  const topic  = $("f-topic")?.value.trim()||"";
+  const desc   = $("f-desc")?.value.trim()||"";
+  const date   = $("f-date")?.value||"";
+  if(!area||!topic||!date){ toast("Completa área, tema y fecha."); return; }
+
+  let assignedTo;
+  if(isSelf==="true") assignedTo=[S.uid];
+  else if(S.assignSelected.length) assignedTo=S.assignSelected;
+  else if(S.adminWView==="team"&&S.selW) assignedTo=[S.selW];
+  else { toast("Selecciona al menos una persona."); return; }
+
+  if(type==="task") {
+    const res = await api("saveTarea",{},{tarea:{area,topic,desc,dueDate:date,assignedTo,assignedBy:S.uid}});
+    if(S_assignFile && res?.id) {
+      toast("Subiendo adjunto ⏳");
+      try { await apiUpload(res.id, null, S_assignFile); } catch(e){ toast("Adjunto no subido: "+e.message); }
+      S_assignFile = null;
+    }
+    toast(assignedTo.includes(S.uid)&&assignedTo.length===1?"Tarea creada.":"Tarea creada y notificaciones enviadas.");
+  } else {
+    // Parse phases from textarea
+    const phasesRaw = ($("f-phases")?.value||"").trim();
+    const phases = phasesRaw
+      ? phasesRaw.split("\n").filter(l=>l.trim()).map((l,i)=>{
+          const name=l.replace(/^[Ff]ase\s*\d*:\s*/,"").trim()||("Fase "+(i+1));
+          return { id:genUid(), name, desc:"", dueDate:"", action:"pending" };
+        })
+      : [];
+    const resP = await api("saveProyecto",{},{proyecto:{name:topic,area,desc,assignedTo,assignedBy:S.uid,phases}});
+    if(S_assignFile && resP?.id) {
+      toast("Subiendo adjunto ⏳");
+      try { await apiUpload(null, resP.id, S_assignFile); } catch(e){ toast("Adjunto no subido: "+e.message); }
+      S_assignFile = null;
+    }
+    toast(assignedTo.includes(S.uid)&&assignedTo.length===1?"Proyecto creado.":"Proyecto creado y notificaciones enviadas.");
+  }
+  closeModal();
+  await reload(); render();
+}
+
+// ── EDIT TASK ─────────────────────────────
+async function doEditTask(id) {
+  const area  = $("f-area")?.value||"";
+  const topic = $("f-topic")?.value.trim()||"";
+  const desc  = $("f-desc")?.value.trim()||"";
+  const date  = $("f-date")?.value||"";
+  if(!topic||!date){ toast("Completa tema y fecha."); return; }
+  const t=S.tareas.find(x=>x.id===id);
+  await api("saveTarea",{},{tarea:{...t,area,topic,desc,dueDate:date,assignedTo:toArr(t.assignedTo)}});
+  toast("Tarea actualizada.");
+  closeModal(); await reload(); render();
+}
+
+// ── EDIT PROJECT ─────────────────────────
+async function doEditProject(id) {
+  const name  = document.getElementById('f-pname')?.value.trim()||"";
+  const area  = document.getElementById('f-parea')?.value||"";
+  const date  = document.getElementById('f-pdate')?.value||"";
+  const desc  = document.getElementById('f-pdesc')?.value.trim()||"";
+  if(!name){ toast("Escribe el nombre del proyecto."); return; }
+  const proj=S.proyectos.find(p=>p.id===id);
+  await api("saveProyecto",{},{proyecto:{...proj,name,area,dueDate:date,desc,assignedTo:toArr(proj.assignedTo)}});
+  toast("Proyecto actualizado.");
+  closeModal(); await reload(); render();
+}
+
+// ── SAVE PHASE EDIT ───────────────────────
+async function doSavePhaseEdit(projId,phId) {
+  const name   = $("f-phname")?.value.trim()||"";
+  const desc   = $("f-phdesc")?.value.trim()||"";
+  const dueDate= $("f-phdate")?.value||"";
+  if(!name||!dueDate){ toast("Completa nombre y fecha."); return; }
+  const proj=S.proyectos.find(p=>p.id===projId);
+  const phases=JSON.parse(JSON.stringify(proj?.phases||[]));
+  if(phId==="new") phases.push({id:genUid(),name,desc,dueDate,action:"pending"});
+  else { const i=phases.findIndex(p=>p.id===phId); if(i>=0) phases[i]={...phases[i],name,desc,dueDate}; }
+  await api("saveProyecto",{},{proyecto:{...proj,phases,assignedTo:toArr(proj.assignedTo)}});
+  toast("Fase guardada.");
+  closeModal(); S.expProj[projId]=true; await reload(); render();
+}
+
+// ── PENDING ACTION ────────────────────────
+function setPendAct(tid,val) {
+  S.pendAct[tid]=val;
+  const btn=document.querySelector(`.sab[data-sab="${tid}"]`);
+  const t=S.tareas.find(x=>x.id===tid);
+  if(btn) btn.classList.toggle("show", val!==t?.action);
+}
+
+function setPendPhase(pk,val) {
+  S.pendPhase[pk]=val;
+  const btn=document.querySelector(`.sab[data-phk="${pk}"]`);
+  const[projId,phId]=pk.split("_");
+  const proj=S.proyectos.find(p=>p.id===projId);
+  const ph=(proj?.phases||[]).find(f=>f.id===phId);
+  if(btn) btn.classList.toggle("show", val!==ph?.action);
+}
+
+async function doSaveAct(tid) {
+  const action=S.pendAct[tid]; if(!action) return;
+  if(action==="done") {
+    if(!confirm("¿Marcar como finalizada? Pasará a completadas y se borrará en 1 semana.")) return;
+    await api("completeTarea",{},{id:tid});
+    toast("✅ Completada. Admins notificados.");
+  } else {
+    await api("updateTarea",{},{id:tid,fields:{action}});
+    toast("Progreso guardado.");
+  }
+  delete S.pendAct[tid]; await reload(); render();
+}
+
+async function doSavePhase(projId,phId,pk) {
+  const action=S.pendPhase[pk]; if(!action) return;
+  await api("updateFase",{},{proyId:projId,faseId:phId,fields:{action}});
+  if(action==="done") toast("Fase completada. Admins notificados.");
+  else toast("Fase actualizada.");
+  delete S.pendPhase[pk]; S.expProj[projId]=true; await reload(); render();
+}
+
+// ── SUPPORT ───────────────────────────────
+async function doSaveSupport(tid) {
+  const sup=$("f-sup")?.value||"";
+  const t=S.tareas.find(x=>x.id===tid);
+  const fields={support:sup||""};
+  if(sup) fields._notifySupport=true;
+  await api("updateTarea",{},{id:tid,fields});
+  toast(sup?`Apoyo asignado a ${uname(sup)}. Notificación enviada.`:"Apoyo removido.");
+  closeModal(); await reload(); render();
+}
+
+// ── NOTE ──────────────────────────────────
+async function doSaveNote(tid) {
+  const ta=document.querySelector(`textarea[data-nid="${tid}"]`);
+  if(!ta) return;
+  await api("updateTarea",{},{id:tid,fields:{note:ta.value}});
+  const t=S.tareas.find(x=>x.id===tid); if(t) t.note=ta.value;
+  toast("Nota guardada.");
+  // update dot without full render
+  const btn=document.querySelector(`button[onclick="toggleNote('${tid}')"]`);
+  if(btn&&ta.value.trim()&&!btn.querySelector(".nd")) {
+    const d=document.createElement("span"); d.className="nd"; btn.appendChild(d);
+  }
+}
+
+// ── FILE ──────────────────────────────────
+async function doUpload(tareaId,proyId,input) {
+  const file=input.files[0]; if(!file) return;
+  if(file.size>4*1024*1024){ toast("Máx. 4MB por archivo."); return; }
+  toast("Subiendo archivo... puede tardar unos segundos ⏳");
+  try {
+    await apiUpload(tareaId, proyId, file);
+    toast("✅ Archivo guardado en Google Drive.");
+    closeModal(); await reload(); render();
+  } catch(err){ toast("Error al subir: "+err.message); }
+}
+
+async function doDelFile(tareaId,fileId,proyId) {
+  if(!confirm("¿Eliminar adjunto?")) return;
+  await api("deleteFile",{},{fileId,tareaId,proyId});
+  toast("Adjunto eliminado.");
+  closeModal(); await reload(); render();
+}
+
+// ── DELETE ────────────────────────────────
+async function doDelTask(id) {
+  if(!confirm("¿Eliminar tarea?")) return;
+  await api("deleteTarea",{},{id}); toast("Tarea eliminada.");
+  await reload(); render();
+}
+async function doDelProj(id) {
+  if(!confirm("¿Eliminar proyecto?")) return;
+  await api("deleteProyecto",{},{id}); toast("Proyecto eliminado.");
+  await reload(); render();
+}
+
+// ── TOGGLES ───────────────────────────────
+function toggleNote(id) { S.expNote[id]=!S.expNote[id]; render(); }
+function toggleProj(id) { S.expProj[id]=!S.expProj[id]; render(); }
+function toggleComp()   { S.showComp=!S.showComp; render(); }
+function setTab(t)      { S.tab=t; render(); }
+function setAV(v)       { S.adminWView=v; render(); }
+function pickWorker(id) { S.selW=id; S.adminWView="team"; render(); }
+
+// ── PASTE & FILE HELPERS ─────────────────
+let S_assignFile = null; // holds pending file for new task
+
+function setAssignFile(input) {
+  const file = input.files[0];
+  if(!file) return;
+  S_assignFile = file;
+  showFilePreview('paste-preview-assign', file);
+}
+
+function showFilePreview(containerId, file) {
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  if(file.type.startsWith('image/')) {
+    const url = URL.createObjectURL(file);
+    el.innerHTML = `<img src="${url}" style="max-height:80px;max-width:200px;border-radius:6px;border:1px solid var(--g3);">
+      <div style="font-size:10px;color:var(--g4);margin-top:3px;">✅ ${file.name}</div>`;
+  } else {
+    el.innerHTML = `<div style="font-size:11px;color:var(--ok);">✅ ${file.name}</div>`;
+  }
+}
+
+function initPasteZone(zoneId, tareaId, proyId) {
+  // Listen for paste globally while modal is open
+  window._pasteHandler = async function(e) {
+    const items = e.clipboardData?.items;
+    if(!items) return;
+    for(const item of items) {
+      if(item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if(!file) return;
+        toast("Imagen pegada — subiendo ⏳");
+        try {
+          await apiUpload(tareaId, proyId, file);
+          toast("✅ Screenshot guardado en Drive.");
+          closeModal(); await reload(); render();
+        } catch(err) { toast("Error: "+err.message); }
+        return;
+      }
+    }
+  };
+  document.addEventListener('paste', window._pasteHandler);
+  // Remove listener when modal closes
+  const overlay = document.querySelector('.mo');
+  if(overlay) overlay.addEventListener('click', removePasteHandler, {once:true});
+}
+
+function initPasteZoneAssign(zoneId) {
+  window._pasteHandlerAssign = function(e) {
+    const items = e.clipboardData?.items;
+    if(!items) return;
+    for(const item of items) {
+      if(item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if(!file) return;
+        S_assignFile = file;
+        showFilePreview('paste-preview-assign', file);
+        toast("📋 Screenshot listo para adjuntar.");
+        return;
+      }
+    }
+  };
+  document.addEventListener('paste', window._pasteHandlerAssign);
+}
+
+function removePasteHandler() {
+  if(window._pasteHandler) {
+    document.removeEventListener('paste', window._pasteHandler);
+    window._pasteHandler = null;
+  }
+  if(window._pasteHandlerAssign) {
+    document.removeEventListener('paste', window._pasteHandlerAssign);
+    window._pasteHandlerAssign = null;
+  }
+}
+
+function restoreNotes() {
+  document.querySelectorAll("textarea[data-nid]").forEach(ta=>{
+    const t=S.tareas.find(x=>x.id===ta.dataset.nid);
+    if(t) ta.value=t.note||"";
+  });
+}
+
+function bindAll() {
+  const fns={openModal,closeModal,setModalType,filterAssign,addAssign,removeAssign,
+    doSaveNew,doEditTask,doEditProject,doSavePhaseEdit,setPendAct,setPendPhase,
+    doSaveAct,doSavePhase,doSaveSupport,doSaveNote,doUpload,doDelFile,
+    doDelTask,doDelProj,toggleNote,toggleProj,toggleComp,setTab,setAV,pickWorker,
+    setAssignFile,initPasteZone,initPasteZoneAssign,removePasteHandler};
+  Object.entries(fns).forEach(([k,v])=>window[k]=v);
+}
+
+boot();
+</script>
+</body>
+</html>
