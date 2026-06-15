@@ -21,8 +21,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* TOPBAR */
 .bar{background:var(--nv);padding:0 18px;display:flex;align-items:center;justify-content:space-between;height:62px;border-bottom:3px solid var(--or);position:sticky;top:0;z-index:50;}
 .bar-l{display:flex;align-items:center;gap:10px;}
-.logo-img{height:38px;width:auto;display:block;flex-shrink:0;}
-.bar-div{width:1px;height:28px;background:rgba(255,255,255,.2);flex-shrink:0;}
 .tabs{display:flex;gap:3px;}
 .tab{padding:5px 11px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:500;background:transparent;color:rgba(255,255,255,.55);transition:all .15s;}
 .tab:hover{background:rgba(255,255,255,.1);color:#fff;}
@@ -475,8 +473,6 @@ function topbar() {
   const a = S.user.role==="admin";
   return`<div class="bar">
     <div class="bar-l">
-      <img class="logo-img" src="logo.png" alt="CETLOG">
-      <div class="bar-div"></div>
       <div class="tabs">
         ${a?`
           <button class="tab ${S.adminWView==='overview'?'on':''}" onclick="setAV('overview')">Resumen</button>
