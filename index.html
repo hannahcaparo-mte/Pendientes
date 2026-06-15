@@ -21,7 +21,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* TOPBAR */
 .bar{background:var(--nv);padding:0 18px;display:flex;align-items:center;justify-content:space-between;height:62px;border-bottom:3px solid var(--or);position:sticky;top:0;z-index:50;}
 .bar-l{display:flex;align-items:center;gap:10px;}
-.logo-img{height:36px;width:auto;display:block;flex-shrink:0;}
+.logo-img{height:36px;width:auto;display:block;flex-shrink:0;background:#fff;border-radius:6px;padding:3px 6px;}
 .bar-div{width:1px;height:28px;background:rgba(255,255,255,.2);flex-shrink:0;}
 .tabs{display:flex;gap:3px;}
 .tab{padding:5px 11px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:500;background:transparent;color:rgba(255,255,255,.55);transition:all .15s;}
@@ -243,6 +243,49 @@ async function api(action, qp={}, body=null) {
   return j.data;
 }
 
+// Upload via chunked approach — base64 in payload but split to avoid URL limits
+async function apiUpload(tareaId, proyId, file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try {
+        const base64 = e.target.result.split(",")[1];
+        const mimeType = file.type;
+        const filename = file.name;
+        // Send as POST with no Content-Type header to avoid CORS preflight
+        // We encode everything as URL params but use POST body as fallback
+        const u = new URL(SCRIPT_URL);
+        u.searchParams.set("action","uploadFile");
+        // Build payload but send via POST with text/plain to avoid preflight
+        const payload = JSON.stringify({action:"uploadFile",tareaId,proyId,filename,base64,mimeType});
+        // Use no-cors won't work for reading response, so we use the GET+payload approach
+        // but chunk if too large
+        if(payload.length < 60000) {
+          u.searchParams.set("payload", encodeURIComponent(payload));
+          const r = await fetch(u.toString());
+          const t = await r.text();
+          const j = JSON.parse(t);
+          if(!j.ok) throw new Error(j.error||"Error subiendo");
+          resolve(j.data);
+        } else {
+          // File too large for URL — send via POST with text/plain (no preflight)
+          const r = await fetch(SCRIPT_URL+"?action=uploadFile", {
+            method:"POST",
+            body: payload,
+            headers: {"Content-Type":"text/plain"}
+          });
+          const t = await r.text();
+          const j = JSON.parse(t);
+          if(!j.ok) throw new Error(j.error||"Error subiendo");
+          resolve(j.data);
+        }
+      } catch(err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error("Error leyendo archivo"));
+    reader.readAsDataURL(file);
+  });
+}
+
 // ── HELPERS ───────────────────────────────
 const $  = id => document.getElementById(id);
 const qp = n  => new URLSearchParams(window.location.search).get(n);
@@ -252,14 +295,36 @@ const toArr = v => { if(!v)return[]; if(Array.isArray(v))return v.filter(Boolean
 const uname = id => USERS[id]?.name||id;
 const anames = arr => toArr(arr).map(uname).join(", ");
 
+function parseDate(s) {
+  // Handles: "2025-06-10", "10/06/2025", "06/10/2025", Date objects, serial numbers from Sheets
+  if(!s) return null;
+  if(s instanceof Date) return s;
+  const str = String(s).trim();
+  if(!str || str==="—") return null;
+  // ISO format YYYY-MM-DD
+  if(/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str+"T12:00:00");
+  // DD/MM/YYYY
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+    const [d,m,y]=str.split("/"); return new Date(`${y}-${m}-${d}T12:00:00`);
+  }
+  // MM/DD/YYYY
+  if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+    const parts=str.split("/"); return new Date(`${parts[2]}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}T12:00:00`);
+  }
+  // Google Sheets serial number (days since Dec 30 1899)
+  if(/^\d+$/.test(str)) {
+    const d=new Date(1899,11,30); d.setDate(d.getDate()+Number(str)); return d;
+  }
+  const d=new Date(str); return isNaN(d)?null:d;
+}
 function fmtDate(s) {
-  if(!s) return "—";
-  return new Date(s+"T12:00:00").toLocaleDateString("es-PE",{day:"2-digit",month:"short",year:"2-digit"});
+  const d=parseDate(s); if(!d) return "—";
+  return d.toLocaleDateString("es-PE",{day:"2-digit",month:"short",year:"2-digit"});
 }
 function dSt(s) {
-  if(!s) return "ok";
-  const d=Math.round((new Date(s+"T12:00:00")-new Date())/86400000);
-  return d<0?"ovr":d<=1?"soon":"ok";
+  const d=parseDate(s); if(!d) return "ok";
+  const diff=Math.round((d-new Date())/86400000);
+  return diff<0?"ovr":diff<=1?"soon":"ok";
 }
 function dHtml(s) {
   const st=dSt(s);
@@ -687,7 +752,7 @@ function openModal(type,id,extra) {
   }
   render();
 }
-function closeModal(){ S.modal=null; render(); }
+function closeModal(){ removePasteHandler(); S_assignFile=null; S.modal=null; render(); }
 
 function renderModal() {
   const {type,id,extra}=S.modal;
@@ -746,7 +811,18 @@ function renderModal() {
           <textarea class="fi" id="f-phases" rows="3" placeholder="Fase 1: Diseño&#10;Fase 2: Desarrollo&#10;Fase 3: Testing"></textarea>
         </div>
       `:""}
+      <div class="fr2" style="margin-top:4px;">
+        <label class="fl2">Adjunto (opcional)</label>
+        <div class="ua" id="paste-zone-assign" onclick="$('f-assign-file').click()"
+          style="min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;">
+          <div>📎 Adjuntar archivo o <b>pegar screenshot</b></div>
+          <div style="font-size:10px;">Ctrl+V / Cmd+V • máx. 4MB</div>
+          <div id="paste-preview-assign" style="margin-top:4px;"></div>
+        </div>
+        <input type="file" id="f-assign-file" accept="image/*,application/pdf" style="display:none;" onchange="setAssignFile(this)">
+      </div>
       <button class="sb" onclick="doSaveNew('${isSelf}')">Crear ${typeToggle==="task"?"tarea":"proyecto"}</button>`;
+    setTimeout(()=>initPasteZoneAssign('paste-zone-assign'),100);
   }
 
   // ── EDIT TASK ──
@@ -824,18 +900,21 @@ function renderModal() {
     const hasF=t?.fileUrl&&t.fileUrl.trim()!=="";
     title="Adjunto de tarea";
     body=`
-      <p style="font-size:12px;color:var(--g6);margin-bottom:10px;">Adjunta una imagen o archivo. Se borrará cuando completes la tarea.</p>
+      <p style="font-size:12px;color:var(--g6);margin-bottom:8px;">Adjunta una imagen o PDF. Se borrará al completar la tarea.</p>
       ${hasF?`
-        <div style="margin-bottom:12px;text-align:center;">
-          <a href="${t.fileUrl}" target="_blank" class="btn nv">🔗 Ver adjunto en Drive</a>
+        <div style="margin-bottom:10px;text-align:center;">
+          <a href="${t.fileUrl}" target="_blank" class="btn nv">🔗 Ver en Drive</a>
           <button class="btn er" style="margin-left:6px;" onclick="doDelFile('${id}','${t.fileId}',null)">🗑️ Quitar</button>
         </div>
       `:""}
-      <div class="ua" onclick="$('f-file').click()">
-        📎 ${hasF?"Reemplazar archivo":"Haz clic para adjuntar"}<br>
-        <span style="font-size:10px;">Imagen, PDF, etc. — máx. 5MB</span>
+      <div class="ua" id="paste-zone-task" onclick="$('f-file').click()"
+        style="min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
+        <div>📎 Haz clic o <b>pega un screenshot (Ctrl+V)</b></div>
+        <div style="font-size:10px;color:var(--g4);">Imagen, PDF — máx. 4MB</div>
+        <div id="paste-preview"></div>
       </div>
-      <input type="file" id="f-file" style="display:none;" onchange="doUpload('${id}',null,this)">`;
+      <input type="file" id="f-file" accept="image/*,application/pdf" style="display:none;" onchange="doUpload('${id}',null,this)">`;
+    setTimeout(()=>initPasteZone('paste-zone-task','${id}',null),100);
   }
 
   return`<div class="mo" onclick="if(event.target===this)closeModal()">
@@ -886,7 +965,12 @@ async function doSaveNew(isSelf) {
   else { toast("Selecciona al menos una persona."); return; }
 
   if(type==="task") {
-    await api("saveTarea",{},{tarea:{area,topic,desc,dueDate:date,assignedTo,assignedBy:S.uid}});
+    const res = await api("saveTarea",{},{tarea:{area,topic,desc,dueDate:date,assignedTo,assignedBy:S.uid}});
+    if(S_assignFile && res?.id) {
+      toast("Subiendo adjunto ⏳");
+      try { await apiUpload(res.id, null, S_assignFile); } catch(e){ toast("Adjunto no subido: "+e.message); }
+      S_assignFile = null;
+    }
     toast(assignedTo.includes(S.uid)&&assignedTo.length===1?"Tarea creada.":"Tarea creada y notificaciones enviadas.");
   } else {
     // Parse phases from textarea
@@ -897,7 +981,12 @@ async function doSaveNew(isSelf) {
           return { id:genUid(), name, desc:"", dueDate:"", action:"pending" };
         })
       : [];
-    await api("saveProyecto",{},{proyecto:{name:topic,area,desc,assignedTo,assignedBy:S.uid,phases}});
+    const resP = await api("saveProyecto",{},{proyecto:{name:topic,area,desc,assignedTo,assignedBy:S.uid,phases}});
+    if(S_assignFile && resP?.id) {
+      toast("Subiendo adjunto ⏳");
+      try { await apiUpload(null, resP.id, S_assignFile); } catch(e){ toast("Adjunto no subido: "+e.message); }
+      S_assignFile = null;
+    }
     toast(assignedTo.includes(S.uid)&&assignedTo.length===1?"Proyecto creado.":"Proyecto creado y notificaciones enviadas.");
   }
   closeModal();
@@ -1011,18 +1100,13 @@ async function doSaveNote(tid) {
 // ── FILE ──────────────────────────────────
 async function doUpload(tareaId,proyId,input) {
   const file=input.files[0]; if(!file) return;
-  if(file.size>5*1024*1024){ toast("Máx. 5MB."); return; }
-  toast("Subiendo archivo...");
-  const reader=new FileReader();
-  reader.onload=async e=>{
-    try {
-      const base64=e.target.result.split(",")[1];
-      await api("uploadFile",{},{tareaId,proyId,filename:file.name,base64,mimeType:file.type});
-      toast("✅ Archivo subido.");
-      closeModal(); await reload(); render();
-    } catch(err){ toast("Error: "+err.message); }
-  };
-  reader.readAsDataURL(file);
+  if(file.size>4*1024*1024){ toast("Máx. 4MB por archivo."); return; }
+  toast("Subiendo archivo... puede tardar unos segundos ⏳");
+  try {
+    await apiUpload(tareaId, proyId, file);
+    toast("✅ Archivo guardado en Google Drive.");
+    closeModal(); await reload(); render();
+  } catch(err){ toast("Error al subir: "+err.message); }
 }
 
 async function doDelFile(tareaId,fileId,proyId) {
@@ -1052,6 +1136,84 @@ function setTab(t)      { S.tab=t; render(); }
 function setAV(v)       { S.adminWView=v; render(); }
 function pickWorker(id) { S.selW=id; S.adminWView="team"; render(); }
 
+// ── PASTE & FILE HELPERS ─────────────────
+let S_assignFile = null; // holds pending file for new task
+
+function setAssignFile(input) {
+  const file = input.files[0];
+  if(!file) return;
+  S_assignFile = file;
+  showFilePreview('paste-preview-assign', file);
+}
+
+function showFilePreview(containerId, file) {
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  if(file.type.startsWith('image/')) {
+    const url = URL.createObjectURL(file);
+    el.innerHTML = `<img src="${url}" style="max-height:80px;max-width:200px;border-radius:6px;border:1px solid var(--g3);">
+      <div style="font-size:10px;color:var(--g4);margin-top:3px;">✅ ${file.name}</div>`;
+  } else {
+    el.innerHTML = `<div style="font-size:11px;color:var(--ok);">✅ ${file.name}</div>`;
+  }
+}
+
+function initPasteZone(zoneId, tareaId, proyId) {
+  // Listen for paste globally while modal is open
+  window._pasteHandler = async function(e) {
+    const items = e.clipboardData?.items;
+    if(!items) return;
+    for(const item of items) {
+      if(item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if(!file) return;
+        toast("Imagen pegada — subiendo ⏳");
+        try {
+          await apiUpload(tareaId, proyId, file);
+          toast("✅ Screenshot guardado en Drive.");
+          closeModal(); await reload(); render();
+        } catch(err) { toast("Error: "+err.message); }
+        return;
+      }
+    }
+  };
+  document.addEventListener('paste', window._pasteHandler);
+  // Remove listener when modal closes
+  const overlay = document.querySelector('.mo');
+  if(overlay) overlay.addEventListener('click', removePasteHandler, {once:true});
+}
+
+function initPasteZoneAssign(zoneId) {
+  window._pasteHandlerAssign = function(e) {
+    const items = e.clipboardData?.items;
+    if(!items) return;
+    for(const item of items) {
+      if(item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if(!file) return;
+        S_assignFile = file;
+        showFilePreview('paste-preview-assign', file);
+        toast("📋 Screenshot listo para adjuntar.");
+        return;
+      }
+    }
+  };
+  document.addEventListener('paste', window._pasteHandlerAssign);
+}
+
+function removePasteHandler() {
+  if(window._pasteHandler) {
+    document.removeEventListener('paste', window._pasteHandler);
+    window._pasteHandler = null;
+  }
+  if(window._pasteHandlerAssign) {
+    document.removeEventListener('paste', window._pasteHandlerAssign);
+    window._pasteHandlerAssign = null;
+  }
+}
+
 function restoreNotes() {
   document.querySelectorAll("textarea[data-nid]").forEach(ta=>{
     const t=S.tareas.find(x=>x.id===ta.dataset.nid);
@@ -1063,7 +1225,8 @@ function bindAll() {
   const fns={openModal,closeModal,setModalType,filterAssign,addAssign,removeAssign,
     doSaveNew,doEditTask,doEditProject,doSavePhaseEdit,setPendAct,setPendPhase,
     doSaveAct,doSavePhase,doSaveSupport,doSaveNote,doUpload,doDelFile,
-    doDelTask,doDelProj,toggleNote,toggleProj,toggleComp,setTab,setAV,pickWorker};
+    doDelTask,doDelProj,toggleNote,toggleProj,toggleComp,setTab,setAV,pickWorker,
+    setAssignFile,initPasteZone,initPasteZoneAssign,removePasteHandler};
   Object.entries(fns).forEach(([k,v])=>window[k]=v);
 }
 
