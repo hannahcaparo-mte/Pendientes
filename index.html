@@ -241,6 +241,19 @@ async function api(action, qp={}, body=null) {
   return j.data;
 }
 
+// ── DOUBLE-CLICK PREVENTION ────────────────
+let S_busy = false;
+async function guard(fn) {
+  if(S_busy) return;
+  S_busy = true;
+  document.querySelectorAll('.sb,.sab.show').forEach(b=>b.disabled=true);
+  try { await fn(); }
+  finally {
+    S_busy = false;
+    document.querySelectorAll('.sb,.sab').forEach(b=>b.disabled=false);
+  }
+}
+
 // Compress image then upload via POST text/plain (avoids CORS preflight)
 async function apiUpload(tareaId, proyId, file) {
   // Step 1: compress if image
@@ -671,10 +684,10 @@ function taskTable(list,isAdmin,isComp=false) {
         </td>
         <td>
           ${isAdmin
-            ?`<div style="font-size:11px;color:var(--g8);">${anames(t.assignedTo)}</div>`
-            :`<div class="by">${by?.name||"—"}</div>`
+            ?`<div style="font-size:11px;color:var(--g8);">${toArr(t.assignedTo).map(uid=>uid===t.leader?uname(uid)+' 👑':uname(uid)).join(", ")}</div>`
+            :`<div class="by">${by?.name||"—"}</div>${t.leader?`<div style="font-size:10px;color:var(--or);margin-top:2px;">👑 ${uname(t.leader)}</div>`:""}`
           }
-          ${t.support?`<div class="sup">👤 ${uname(t.support)}</div>`:""}
+          ${toArr(t.support).length?`<div class="sup">👥 ${toArr(t.support).map(uname).join(", ")}</div>`:""}
         </td>
         <td style="white-space:nowrap;font-size:11px;">${dHtml(t.dueDate)}</td>
         <td>
@@ -705,6 +718,7 @@ function projCards(list,isAdmin) {
     const p   = ppct(proj);
     const exp = S.expProj[proj.id];
     const by  = proj.assignedBy?USERS[proj.assignedBy]:null;
+    const hasProjFile = proj.fileUrl&&proj.fileUrl.trim()!=="";
     return`<div class="pc">
       <div class="ph ${proj.completed?"cp":""}" onclick="toggleProj('${proj.id}')">
         <div style="flex:1;min-width:0;">
@@ -712,8 +726,9 @@ function projCards(list,isAdmin) {
             <span class="pt">${proj.name}</span>
             ${proj.completed?'<span class="bg dn">Completado</span>':""}
           </div>
-          <div class="pm">${proj.area}${isAdmin?" · "+anames(proj.assignedTo):""} · ${(proj.phases||[]).length} fase${(proj.phases||[]).length!==1?"s":""}</div>
+          <div class="pm">${proj.area}${isAdmin?" · "+toArr(proj.assignedTo).map(uid=>uid===proj.leader?uname(uid)+' 👑':uname(uid)).join(", "):""} · ${(proj.phases||[]).length} fase${(proj.phases||[]).length!==1?"s":""}</div>
           ${by?`<div class="pm">Por: ${by.name}</div>`:""}
+          ${!isAdmin&&proj.leader?`<div class="pm" style="color:var(--or);">👑 Responsable: ${uname(proj.leader)}</div>`:""}
         </div>
         <div class="pr">
           <div style="text-align:right;">
@@ -724,33 +739,53 @@ function projCards(list,isAdmin) {
         </div>
       </div>
       ${exp?`<div class="pbody">
-        <div class="fhr"><div></div><div>Fase</div><div>Descripción</div><div>Fecha</div><div>Estado</div></div>
+        <div style="background:var(--g1);border-radius:8px;padding:10px 12px;margin-top:10px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+            <div style="font-size:11px;color:var(--g6);"><b>📅 Fecha límite del proyecto:</b> ${proj.dueDate?fmtDate(proj.dueDate):"No definida"}</div>
+            <button class="btn nv" style="font-size:10px;" onclick="openModal('editProject','${proj.id}',null)">✏️ Editar proyecto</button>
+          </div>
+          ${proj.desc?`<div class="desc-text" style="font-size:12px;">${descHtml(proj.desc)}</div>`:""}
+          ${hasProjFile?`<div class="fp" style="margin-top:5px;"><a href="${proj.fileUrl}" target="_blank">📎 Ver adjunto del proyecto</a></div>`:""}
+        </div>
+
+        <div class="sec-t" style="margin:10px 0 6px;">Fases</div>
         ${(proj.phases||[]).map((ph,i)=>{
           const pk=proj.id+"_"+ph.id;
           const pp2=S.pendPhase[pk];
-          return`<div class="fr">
-            <div class="fn ${ph.action==="done"?"dn":""}">${ph.action==="done"?"✓":(i+1)}</div>
-            <div style="font-weight:600;color:var(--nv);font-size:12px;">${ph.name}
-              ${isAdmin?`<button class="btn nv" style="font-size:9px;padding:2px 5px;margin-left:3px;" onclick="openModal('editPhase','${proj.id}:${ph.id}',null)">✏️</button>`:""}
-            </div>
-            <div style="font-size:11px;color:var(--g6);">${ph.desc||""}</div>
-            <div style="font-size:11px;">${dHtml(ph.dueDate)}</div>
-            <div>
-              <div class="ae">
-                <select class="sel" style="width:90px;" data-phk="${pk}" onchange="setPendPhase('${pk}',this.value)">
-                  <option value="pending"  ${ph.action==="pending" ?"selected":""}>Pendiente</option>
-                  <option value="progress" ${ph.action==="progress"?"selected":""}>Avanzado</option>
-                  <option value="done"     ${ph.action==="done"    ?"selected":""}>Finalizado</option>
-                </select>
-                <button class="sab ${pp2&&pp2!==ph.action?'show':''}" data-phk="${pk}" onclick="doSavePhase('${proj.id}','${ph.id}','${pk}')">Guardar</button>
+          const hasPhFile = ph.fileUrl&&ph.fileUrl.trim()!=="";
+          const phSupport = toArr(ph.support);
+          return`<div style="background:var(--g0);border:0.5px solid var(--g2);border-radius:8px;padding:9px 11px;margin-bottom:7px;">
+            <div style="display:flex;align-items:flex-start;gap:8px;">
+              <div class="fn ${ph.action==="done"?"dn":""}" style="margin-top:1px;">${ph.action==="done"?"✓":(i+1)}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;">
+                  <span style="font-weight:600;color:var(--nv);font-size:12px;">${ph.name}</span>
+                  <div style="display:flex;gap:3px;">
+                    <button class="btn nv" style="font-size:9px;padding:2px 6px;" onclick="openModal('editPhase','${proj.id}:${ph.id}',null)">✏️</button>
+                    <button class="btn fl" style="font-size:9px;padding:2px 6px;" onclick="openModal('phaseFile','${proj.id}:${ph.id}',null)">📎${hasPhFile?"✓":""}</button>
+                    <button class="btn gh" style="font-size:9px;padding:2px 6px;" onclick="openModal('phaseSupport','${proj.id}:${ph.id}',null)">👥</button>
+                    <button class="btn er" style="font-size:9px;padding:2px 6px;" onclick="doDelFase('${proj.id}','${ph.id}')">🗑️</button>
+                  </div>
+                </div>
+                ${ph.desc?`<div style="font-size:11px;color:var(--g6);margin-top:2px;">${descHtml(ph.desc)}</div>`:""}
+                <div style="font-size:11px;margin-top:3px;">${ph.dueDate?dHtml(ph.dueDate):'<span style="color:var(--g4);">Sin fecha</span>'}</div>
+                ${hasPhFile?`<div class="fp" style="margin-top:3px;"><a href="${ph.fileUrl}" target="_blank">📎 Ver adjunto</a></div>`:""}
+                ${phSupport.length?`<div class="sup" style="margin-top:3px;">👥 Apoyo: ${phSupport.map(uname).join(", ")}</div>`:""}
+                <div class="ae" style="margin-top:6px;">
+                  <select class="sel" data-phk="${pk}" onchange="setPendPhase('${pk}',this.value)">
+                    <option value="pending"  ${ph.action==="pending" ?"selected":""}>Pendiente</option>
+                    <option value="progress" ${ph.action==="progress"?"selected":""}>Avanzado</option>
+                    <option value="done"     ${ph.action==="done"    ?"selected":""}>Finalizado</option>
+                  </select>
+                  <button class="sab ${pp2&&pp2!==ph.action?'show':''}" data-phk="${pk}" onclick="guard(()=>doSavePhase('${proj.id}','${ph.id}','${pk}'))">Guardar</button>
+                </div>
               </div>
             </div>
           </div>`;
         }).join("")}
         <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;">
-          <button class="btn or" onclick="openModal('editPhase','${proj.id}:new',null)">+ Fase</button>
-          <button class="btn nv" onclick="openModal('editProject','${proj.id}',null)">✏️ Editar proyecto</button>
-          ${isAdmin?`<button class="btn er" onclick="doDelProj('${proj.id}')">🗑️ Eliminar</button>`:""}
+          <button class="btn or" onclick="openModal('editPhase','${proj.id}:new',null)">+ Agregar fase</button>
+          ${isAdmin?`<button class="btn er" onclick="doDelProj('${proj.id}')">🗑️ Eliminar proyecto</button>`:""}
         </div>
       </div>`:""}
     </div>`;
@@ -759,15 +794,16 @@ function projCards(list,isAdmin) {
 
 // ── MODAL ─────────────────────────────────
 function openModal(type,id,extra) {
-  S.modal={type,id,extra};
+  S.modal={type,id,extra,_itemType:extra==="project"?"project":"task"};
   if(type==="assign"||type==="selfAssign") {
-    S.assignSearch=""; S.assignSelected=[];
-    // Pre-select current worker if admin team view
+    S.assignSearch=""; S.assignSelected=[]; S.assignLeader=null;
+    S.newProjPhases=[];
     if(type==="assign"&&S.adminWView==="team"&&S.selW) S.assignSelected=[S.selW];
   }
+  if(type==="support") S.supportSelected=null;
   render();
 }
-function closeModal(){ removePasteHandler(); S_assignFile=null; S.modal=null; render(); }
+function closeModal(){ removePasteHandler(); S_assignFile=null; S.supportSelected=null; S.modal=null; render(); }
 
 function renderModal() {
   const {type,id,extra}=S.modal;
@@ -777,9 +813,9 @@ function renderModal() {
   // ── ASSIGN (admin) or SELF-ASSIGN (worker) ──
   if(type==="assign"||type==="selfAssign") {
     const isSelf=type==="selfAssign";
-    const isTask=extra==="task"||(S.modal._type&&S.modal._type==="task")||true;
     title=isSelf?"Nueva tarea / proyecto":"Asignar tarea / proyecto";
-    const typeToggle=S.modal._itemType||"task";
+    const typeToggle=S.modal._itemType||extra||"task";
+    const draft=S.modal._draft||{};
     body=`
       <div style="display:flex;gap:6px;margin-bottom:12px;">
         <button class="btn ${typeToggle==='task'?'or':'gh'}" onclick="setModalType('task')">📋 Tarea</button>
@@ -794,9 +830,21 @@ function renderModal() {
           <div id="assign-drop" class="drop" style="${S.assignSearch?'':'display:none'}"></div>
           <div class="tags" id="assign-tags">
             ${S.assignSelected.map(uid=>`
-              <span class="tag-item">${uname(uid)}<span class="tag-x" onclick="removeAssign('${uid}')">×</span></span>
+              <span class="tag-item">
+                ${uname(uid)}${S.assignLeader===uid?' 👑':''}
+                <span class="tag-x" onclick="removeAssign('${uid}')">×</span>
+              </span>
             `).join("")}
           </div>
+          ${S.assignSelected.length>1?`
+            <div style="margin-top:6px;">
+              <label class="fl2" style="margin-bottom:3px;">Responsable principal 👑 (opcional)</label>
+              <select class="fi" id="f-leader" onchange="setAssignLeader(this.value)">
+                <option value="">Sin responsable específico</option>
+                ${S.assignSelected.map(uid=>`<option value="${uid}" ${S.assignLeader===uid?"selected":""}>${uname(uid)}</option>`).join("")}
+              </select>
+            </div>
+          `:""}
         </div>
       `:""}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
@@ -804,26 +852,38 @@ function renderModal() {
           <label class="fl2">Área</label>
           <select class="fi" id="f-area">
             <option value="">Selecciona...</option>
-            ${AREAS.map(a=>`<option value="${a}">${a}</option>`).join("")}
+            ${AREAS.map(a=>`<option value="${a}" ${draft.area===a?"selected":""}>${a}</option>`).join("")}
           </select>
         </div>
         <div class="fr2">
           <label class="fl2">Tema</label>
-          <input class="fi" id="f-topic" placeholder="Ej: Q10">
+          <input class="fi" id="f-topic" placeholder="Ej: Q10" value="${draft.topic||""}">
         </div>
       </div>
       <div class="fr2">
         <label class="fl2">Descripción / Links (opcional)</label>
-        <textarea class="fi" id="f-desc" rows="3" placeholder="Descripción, pega links aquí..."></textarea>
+        <textarea class="fi" id="f-desc" rows="3" placeholder="Descripción, pega links aquí...">${draft.desc||""}</textarea>
       </div>
       <div class="fr2">
         <label class="fl2">Fecha límite</label>
-        <input class="fi" type="date" id="f-date">
+        <input class="fi" type="date" id="f-date" value="${draft.date||""}">
       </div>
       ${typeToggle==="project"?`
         <div class="fr2">
-          <label class="fl2">Fases (opcional — una por línea)</label>
-          <textarea class="fi" id="f-phases" rows="3" placeholder="Fase 1: Diseño&#10;Fase 2: Desarrollo&#10;Fase 3: Testing"></textarea>
+          <label class="fl2">Fases (opcional — puedes agregar después con +)</label>
+          <div id="new-proj-phases">
+            ${(S.newProjPhases||[]).map((ph,i)=>`
+              <div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start;background:var(--g1);padding:7px;border-radius:7px;">
+                <div style="flex:1;">
+                  <input class="fi" style="margin-bottom:4px;" placeholder="Nombre de la fase" value="${ph.name||""}" oninput="updateNewPhase(${i},'name',this.value)">
+                  <input class="fi" style="margin-bottom:4px;" placeholder="Descripción (opcional)" value="${ph.desc||""}" oninput="updateNewPhase(${i},'desc',this.value)">
+                  <input class="fi" type="date" value="${ph.dueDate||""}" oninput="updateNewPhase(${i},'dueDate',this.value)">
+                </div>
+                <button class="btn er" style="margin-top:2px;" onclick="removeNewPhase(${i})">✕</button>
+              </div>
+            `).join("")}
+          </div>
+          <button class="btn or" onclick="addNewPhase()">+ Agregar fase</button>
         </div>
       `:""}
       <div class="fr2" style="margin-top:4px;">
@@ -836,13 +896,14 @@ function renderModal() {
         </div>
         <input type="file" id="f-assign-file" accept="image/*,application/pdf" style="display:none;" onchange="setAssignFile(this)">
       </div>
-      <button class="sb" onclick="doSaveNew('${isSelf}')">Crear ${typeToggle==="task"?"tarea":"proyecto"}</button>`;
+      <button class="sb" onclick="guard(()=>doSaveNew('${isSelf}'))">Crear ${typeToggle==="task"?"tarea":"proyecto"}</button>`;
     setTimeout(()=>initPasteZoneAssign('paste-zone-assign'),100);
   }
 
   // ── EDIT TASK ──
   if(type==="editTask") {
     const t=S.tareas.find(x=>x.id===id);
+    const assignedArr=toArr(t?.assignedTo);
     title="Editar tarea";
     body=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
@@ -857,12 +918,21 @@ function renderModal() {
         <textarea class="fi" id="f-desc" rows="3">${t?.desc||""}</textarea>
       </div>
       <div class="fr2"><label class="fl2">Fecha límite</label><input class="fi" type="date" id="f-date" value="${t?.dueDate||""}"></div>
-      <button class="sb" onclick="doEditTask('${id}')">Guardar cambios</button>`;
+      ${isAdmin&&assignedArr.length>1?`
+        <div class="fr2"><label class="fl2">Responsable principal 👑</label>
+          <select class="fi" id="f-leader">
+            <option value="">Sin responsable específico</option>
+            ${assignedArr.map(uid=>`<option value="${uid}" ${t?.leader===uid?"selected":""}>${uname(uid)}</option>`).join("")}
+          </select>
+        </div>
+      `:""}
+      <button class="sb" onclick="guard(()=>doEditTask('${id}'))">Guardar cambios</button>`;
   }
 
   // ── EDIT PROJECT ──
   if(type==="editProject") {
     const proj=S.proyectos.find(p=>p.id===id);
+    const assignedArr=toArr(proj?.assignedTo);
     title="Editar proyecto";
     body=`
       <div class="fr2"><label class="fl2">Nombre del proyecto</label><input class="fi" id="f-pname" value="${proj?.name||""}"></div>
@@ -877,7 +947,67 @@ function renderModal() {
       <div class="fr2"><label class="fl2">Descripción</label>
         <textarea class="fi" id="f-pdesc" rows="2">${proj?.desc||""}</textarea>
       </div>
-      <button class="sb" onclick="doEditProject('${id}')">Guardar cambios</button>`;
+      ${isAdmin&&assignedArr.length>1?`
+        <div class="fr2"><label class="fl2">Responsable principal 👑</label>
+          <select class="fi" id="f-pleader">
+            <option value="">Sin responsable específico</option>
+            ${assignedArr.map(uid=>`<option value="${uid}" ${proj?.leader===uid?"selected":""}>${uname(uid)}</option>`).join("")}
+          </select>
+        </div>
+      `:""}
+      <button class="sb" onclick="guard(()=>doEditProject('${id}'))">Guardar cambios</button>`;
+  }
+
+  // ── PHASE FILE ──
+  if(type==="phaseFile") {
+    const[projId,phId]=id.split(":");
+    const proj=S.proyectos.find(p=>p.id===projId);
+    const ph=(proj?.phases||[]).find(p=>p.id===phId);
+    const hasF=ph?.fileUrl&&ph.fileUrl.trim()!=="";
+    title="Adjunto de fase";
+    body=`
+      <p style="font-size:12px;color:var(--g6);margin-bottom:8px;">Adjunta una imagen o PDF a esta fase.</p>
+      ${hasF?`
+        <div style="margin-bottom:10px;text-align:center;">
+          <a href="${ph.fileUrl}" target="_blank" class="btn nv">🔗 Ver en Drive</a>
+          <button class="btn er" style="margin-left:6px;" onclick="doDelFile(null,'${ph.fileId}','${projId}','${phId}')">🗑️ Quitar</button>
+        </div>
+      `:""}
+      <div class="ua" id="paste-zone-phase" onclick="$('f-phase-file').click()"
+        style="min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
+        <div>📎 Haz clic o <b>pega un screenshot (Ctrl+V)</b></div>
+        <div style="font-size:10px;color:var(--g4);">Imagen, PDF — máx. 4MB</div>
+      </div>
+      <input type="file" id="f-phase-file" accept="image/*,application/pdf" style="display:none;" onchange="doUploadPhase('${projId}','${phId}',this)">`;
+    setTimeout(()=>initPasteZonePhase('${projId}','${phId}'),100);
+  }
+
+  // ── PHASE SUPPORT ──
+  if(type==="phaseSupport") {
+    const[projId,phId]=id.split(":");
+    const proj=S.proyectos.find(p=>p.id===projId);
+    const ph=(proj?.phases||[]).find(p=>p.id===phId);
+    if(!S.supportSelected) S.supportSelected=toArr(ph?.support);
+    title="Pedir apoyo en esta fase";
+    body=`
+      <p style="font-size:12px;color:var(--g6);margin-bottom:10px;">Elige a quién pedirle apoyo en esta fase.</p>
+      <div class="fr2">
+        <label class="fl2">Colaboradores</label>
+        <div class="srch">
+          <input id="sup-srch" placeholder="Buscar persona..." oninput="filterSupport(this.value)" autocomplete="off">
+        </div>
+        <div id="sup-drop" class="drop" style="display:none;"></div>
+        <div class="tags" id="sup-tags">
+          ${S.supportSelected.map(uid=>`
+            <span class="tag-item">${uname(uid)}<span class="tag-x" onclick="removeSupportSel('${uid}')">×</span></span>
+          `).join("")}
+        </div>
+      </div>
+      <div class="fr2">
+        <label class="fl2">¿En qué necesitas apoyo? (opcional)</label>
+        <textarea class="fi" id="f-sup-msg" rows="3" placeholder="Describe en qué necesitas ayuda..."></textarea>
+      </div>
+      <button class="sb" onclick="guard(()=>doSavePhaseSupport('${projId}','${phId}'))">Pedir apoyo 📧</button>`;
   }
 
   // ── EDIT PHASE ──
@@ -890,23 +1020,34 @@ function renderModal() {
       <div class="fr2"><label class="fl2">Nombre</label><input class="fi" id="f-phname" value="${ph?.name||""}" placeholder="Ej: Diseño UX"></div>
       <div class="fr2"><label class="fl2">Descripción</label><input class="fi" id="f-phdesc" value="${ph?.desc||""}" placeholder="¿Qué incluye?"></div>
       <div class="fr2"><label class="fl2">Fecha límite</label><input class="fi" type="date" id="f-phdate" value="${ph?.dueDate||""}"></div>
-      <button class="sb" onclick="doSavePhaseEdit('${projId}','${phId}')">${ph?"Guardar":"Agregar"}</button>`;
+      <button class="sb" onclick="guard(()=>doSavePhaseEdit('${projId}','${phId}'))">${ph?"Guardar":"Agregar"}</button>`;
   }
 
-  // ── SUPPORT ──
+  // ── SUPPORT (multiple people + message) ──
   if(type==="support") {
     const t=S.tareas.find(x=>x.id===id);
-    title="Asignar apoyo";
+    const currentSupport = toArr(t?.support);
+    if(!S.supportSelected) S.supportSelected = [...currentSupport];
+    title="Pedir apoyo";
     body=`
-      <p style="font-size:12px;color:var(--g6);margin-bottom:10px;">El colaborador recibirá un correo.</p>
-      <div class="fr2"><label class="fl2">Colaborador</label>
-        <select class="fi" id="f-sup">
-          <option value="">Sin apoyo</option>
-          ${Object.entries(USERS).filter(([uid])=>uid!==S.uid).map(([uid,u])=>`
-            <option value="${uid}" ${t?.support===uid?"selected":""}>${u.name}</option>`).join("")}
-        </select>
+      <p style="font-size:12px;color:var(--g6);margin-bottom:10px;">Elige a quién pedirle apoyo. Recibirán un correo con tu mensaje.</p>
+      <div class="fr2">
+        <label class="fl2">Colaboradores</label>
+        <div class="srch">
+          <input id="sup-srch" placeholder="Buscar persona..." oninput="filterSupport(this.value)" autocomplete="off">
+        </div>
+        <div id="sup-drop" class="drop" style="display:none;"></div>
+        <div class="tags" id="sup-tags">
+          ${S.supportSelected.map(uid=>`
+            <span class="tag-item">${uname(uid)}<span class="tag-x" onclick="removeSupportSel('${uid}')">×</span></span>
+          `).join("")}
+        </div>
       </div>
-      <button class="sb" onclick="doSaveSupport('${id}')">Asignar 📧</button>`;
+      <div class="fr2">
+        <label class="fl2">¿En qué necesitas apoyo? (opcional)</label>
+        <textarea class="fi" id="f-sup-msg" rows="3" placeholder="Ej: Necesito ayuda revisando los datos antes de entregar..."></textarea>
+      </div>
+      <button class="sb" onclick="guard(()=>doSaveSupport('${id}'))">Pedir apoyo 📧</button>`;
   }
 
   // ── FILE ──
@@ -962,25 +1103,48 @@ function addAssign(uid) {
   if(!S.assignSelected.includes(uid)) S.assignSelected.push(uid);
   S.assignSearch=""; render();
 }
-function removeAssign(uid) { S.assignSelected=S.assignSelected.filter(x=>x!==uid); render(); }
+function removeAssign(uid) {
+  S.assignSelected=S.assignSelected.filter(x=>x!==uid);
+  if(S.assignLeader===uid) S.assignLeader=null;
+  render();
+}
+function setAssignLeader(uid) { S.assignLeader=uid||null; }
+
+// New project phase builder (before project is created)
+function addNewPhase() {
+  if(!S.newProjPhases) S.newProjPhases=[];
+  S.newProjPhases.push({name:"",desc:"",dueDate:""});
+  render();
+}
+function removeNewPhase(i) { S.newProjPhases.splice(i,1); render(); }
+function updateNewPhase(i,field,val) {
+  if(!S.newProjPhases[i]) return;
+  S.newProjPhases[i][field]=val;
+}
 
 // ── SAVE NEW (task or project) ────────────
 async function doSaveNew(isSelf) {
-  const type   = S.modal._itemType||"task";
-  const area   = $("f-area")?.value||"";
-  const topic  = $("f-topic")?.value.trim()||"";
-  const desc   = $("f-desc")?.value.trim()||"";
-  const date   = $("f-date")?.value||"";
+  const type  = S.modal._itemType||"task";
+  const area  = $("f-area")?.value||"";
+  const topic = $("f-topic")?.value.trim()||"";
+  const desc  = $("f-desc")?.value.trim()||"";
+  const date  = $("f-date")?.value||"";
+
+  // Save draft so nothing is lost if validation fails
+  S.modal._draft = {area,topic,desc,date};
+
   if(!area||!topic||!date){ toast("Completa área, tema y fecha."); return; }
 
   let assignedTo;
   if(isSelf==="true") assignedTo=[S.uid];
   else if(S.assignSelected.length) assignedTo=S.assignSelected;
   else if(S.adminWView==="team"&&S.selW) assignedTo=[S.selW];
-  else { toast("Selecciona al menos una persona."); return; }
+  else { toast("Selecciona al menos una persona para asignar."); return; }
+
+  const leader = S.assignLeader || "";
 
   if(type==="task") {
-    const res = await api("saveTarea",{},{tarea:{area,topic,desc,dueDate:date,assignedTo,assignedBy:S.uid}});
+    const res = await api("saveTarea",{},{tarea:{area,topic,desc,dueDate:date,assignedTo,assignedBy:S.uid,leader}});
     if(S_assignFile && res?.id) {
       toast("Subiendo adjunto ⏳");
       try { await apiUpload(res.id, null, S_assignFile); } catch(e){ toast("Adjunto no subido: "+e.message); }
@@ -988,15 +1152,10 @@ async function doSaveNew(isSelf) {
     }
     toast(assignedTo.includes(S.uid)&&assignedTo.length===1?"Tarea creada.":"Tarea creada y notificaciones enviadas.");
   } else {
-    // Parse phases from textarea
-    const phasesRaw = ($("f-phases")?.value||"").trim();
-    const phases = phasesRaw
-      ? phasesRaw.split("\n").filter(l=>l.trim()).map((l,i)=>{
-          const name=l.replace(/^[Ff]ase\s*\d*:\s*/,"").trim()||("Fase "+(i+1));
-          return { id:genUid(), name, desc:"", dueDate:"", action:"pending" };
-        })
-      : [];
-    const resP = await api("saveProyecto",{},{proyecto:{name:topic,area,desc,assignedTo,assignedBy:S.uid,phases}});
+    const phases = (S.newProjPhases||[])
+      .filter(p=>p.name&&p.name.trim())
+      .map(p=>({id:genUid(),name:p.name.trim(),desc:p.desc||"",dueDate:p.dueDate||"",action:"pending",support:"",fileId:"",fileUrl:""}));
+    const resP = await api("saveProyecto",{},{proyecto:{name:topic,area,desc,dueDate:date,assignedTo,assignedBy:S.uid,leader,phases}});
     if(S_assignFile && resP?.id) {
       toast("Subiendo adjunto ⏳");
       try { await apiUpload(null, resP.id, S_assignFile); } catch(e){ toast("Adjunto no subido: "+e.message); }
@@ -1014,9 +1173,12 @@ async function doEditTask(id) {
   const topic = $("f-topic")?.value.trim()||"";
   const desc  = $("f-desc")?.value.trim()||"";
   const date  = $("f-date")?.value||"";
+  const leaderEl = $("f-leader");
   if(!topic||!date){ toast("Completa tema y fecha."); return; }
   const t=S.tareas.find(x=>x.id===id);
-  await api("saveTarea",{},{tarea:{...t,area,topic,desc,dueDate:date,assignedTo:toArr(t.assignedTo)}});
+  const updates={...t,area,topic,desc,dueDate:date,assignedTo:toArr(t.assignedTo),support:toArr(t.support)};
+  if(leaderEl) updates.leader=leaderEl.value||"";
+  await api("saveTarea",{},{tarea:updates});
   toast("Tarea actualizada.");
   closeModal(); await reload(); render();
 }
@@ -1027,11 +1189,82 @@ async function doEditProject(id) {
   const area  = document.getElementById('f-parea')?.value||"";
   const date  = document.getElementById('f-pdate')?.value||"";
   const desc  = document.getElementById('f-pdesc')?.value.trim()||"";
+  const leaderEl = document.getElementById('f-pleader');
   if(!name){ toast("Escribe el nombre del proyecto."); return; }
   const proj=S.proyectos.find(p=>p.id===id);
-  await api("saveProyecto",{},{proyecto:{...proj,name,area,dueDate:date,desc,assignedTo:toArr(proj.assignedTo)}});
+  const updates={...proj,name,area,dueDate:date,desc,assignedTo:toArr(proj.assignedTo)};
+  if(leaderEl) updates.leader=leaderEl.value||"";
+  await api("saveProyecto",{},{proyecto:updates});
   toast("Proyecto actualizado.");
   closeModal(); await reload(); render();
+}
+
+// ── PHASE FILE UPLOAD ─────────────────────
+async function doUploadPhase(projId, phId, input) {
+  const file=input.files[0]; if(!file) return;
+  if(file.size>4*1024*1024){ toast("Máx. 4MB por archivo."); return; }
+  toast("Subiendo archivo... ⏳");
+  try {
+    await apiUploadPhase(projId, phId, file);
+    toast("✅ Archivo guardado en Drive.");
+    closeModal(); S.expProj[projId]=true; await reload(); render();
+  } catch(err){ toast("Error al subir: "+err.message); }
+}
+
+async function apiUploadPhase(projId, phId, file) {
+  const compressed = await compressFile(file);
+  const base64 = await toBase64(compressed);
+  const payload = JSON.stringify({
+    action:"uploadFile", proyId:projId, faseId:phId,
+    filename:file.name, base64, mimeType:compressed.type||file.type
+  });
+  const r = await fetch(SCRIPT_URL, { method:"POST", body:payload, headers:{"Content-Type":"text/plain;charset=utf-8"} });
+  const t = await r.text();
+  let j; try{j=JSON.parse(t);}catch(e){throw new Error("Respuesta inválida");}
+  if(!j.ok) throw new Error(j.error||"Error al subir");
+  return j.data;
+}
+
+function initPasteZonePhase(projId, phId) {
+  window._pasteHandler = async function(e) {
+    const items = e.clipboardData?.items;
+    if(!items) return;
+    for(const item of items) {
+      if(item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if(!file) return;
+        toast("Imagen pegada — subiendo ⏳");
+        try {
+          await apiUploadPhase(projId, phId, file);
+          toast("✅ Screenshot guardado en Drive.");
+          closeModal(); S.expProj[projId]=true; await reload(); render();
+        } catch(err) { toast("Error: "+err.message); }
+        return;
+      }
+    }
+  };
+  document.addEventListener('paste', window._pasteHandler);
+}
+
+// ── PHASE SUPPORT ─────────────────────────
+async function doSavePhaseSupport(projId, phId) {
+  const selected = S.supportSelected||[];
+  const msg = $("f-sup-msg")?.value.trim()||"";
+  const fields={support:selected};
+  if(selected.length){ fields._notifySupport=true; fields._supportMsg=msg; }
+  await api("updateFase",{},{proyId:projId,faseId:phId,fields});
+  toast(selected.length?`Apoyo solicitado a ${selected.map(uname).join(", ")}.`:"Apoyo removido.");
+  S.supportSelected=null;
+  closeModal(); S.expProj[projId]=true; await reload(); render();
+}
+
+// ── DELETE PHASE ───────────────────────────
+async function doDelFase(projId, phId) {
+  if(!confirm("¿Eliminar esta fase?")) return;
+  await api("deleteFase",{},{proyId:projId,faseId:phId});
+  toast("Fase eliminada.");
+  S.expProj[projId]=true; await reload(); render();
 }
 
 // ── SAVE PHASE EDIT ───────────────────────
@@ -1039,11 +1272,15 @@ async function doSavePhaseEdit(projId,phId) {
   const name   = $("f-phname")?.value.trim()||"";
   const desc   = $("f-phdesc")?.value.trim()||"";
   const dueDate= $("f-phdate")?.value||"";
-  if(!name||!dueDate){ toast("Completa nombre y fecha."); return; }
+  if(!name){ toast("Escribe el nombre de la fase."); return; }
   const proj=S.proyectos.find(p=>p.id===projId);
   const phases=JSON.parse(JSON.stringify(proj?.phases||[]));
-  if(phId==="new") phases.push({id:genUid(),name,desc,dueDate,action:"pending"});
-  else { const i=phases.findIndex(p=>p.id===phId); if(i>=0) phases[i]={...phases[i],name,desc,dueDate}; }
+  if(phId==="new") {
+    phases.push({id:genUid(),name,desc,dueDate,action:"pending",support:"",fileId:"",fileUrl:""});
+  } else {
+    const i=phases.findIndex(p=>p.id===phId);
+    if(i>=0) phases[i]={...phases[i],name,desc,dueDate};
+  }
   await api("saveProyecto",{},{proyecto:{...proj,phases,assignedTo:toArr(proj.assignedTo)}});
   toast("Fase guardada.");
   closeModal(); S.expProj[projId]=true; await reload(); render();
@@ -1088,13 +1325,38 @@ async function doSavePhase(projId,phId,pk) {
 }
 
 // ── SUPPORT ───────────────────────────────
+function filterSupport(val) {
+  const drop=$("sup-drop");
+  if(!drop) return;
+  if(!val.trim()){ drop.style.display="none"; return; }
+  const matches=Object.entries(USERS)
+    .filter(([uid])=>uid!==S.uid && !(S.supportSelected||[]).includes(uid))
+    .filter(([,u])=>u.name.toLowerCase().includes(val.toLowerCase()));
+  drop.style.display=matches.length?"block":"none";
+  drop.innerHTML=matches.map(([uid,u])=>`
+    <div class="di" onclick="addSupportSel('${uid}')">
+      <div class="av" style="width:22px;height:22px;font-size:9px;background:var(--${u.role==='admin'?'nvm':'or'});color:#fff;">${u.initials}</div>
+      ${u.name}
+    </div>`).join("");
+}
+function addSupportSel(uid) {
+  if(!S.supportSelected) S.supportSelected=[];
+  if(!S.supportSelected.includes(uid)) S.supportSelected.push(uid);
+  render();
+}
+function removeSupportSel(uid) {
+  S.supportSelected=(S.supportSelected||[]).filter(x=>x!==uid);
+  render();
+}
+
 async function doSaveSupport(tid) {
-  const sup=$("f-sup")?.value||"";
-  const t=S.tareas.find(x=>x.id===tid);
-  const fields={support:sup||""};
-  if(sup) fields._notifySupport=true;
+  const selected = S.supportSelected||[];
+  const msg = $("f-sup-msg")?.value.trim()||"";
+  const fields={support:selected};
+  if(selected.length){ fields._notifySupport=true; fields._supportMsg=msg; }
   await api("updateTarea",{},{id:tid,fields});
-  toast(sup?`Apoyo asignado a ${uname(sup)}. Notificación enviada.`:"Apoyo removido.");
+  toast(selected.length?`Apoyo solicitado a ${selected.map(uname).join(", ")}.`:"Apoyo removido.");
+  S.supportSelected=null;
   closeModal(); await reload(); render();
 }
 
@@ -1124,11 +1386,11 @@ async function doUpload(tareaId,proyId,input) {
   } catch(err){ toast("Error al subir: "+err.message); }
 }
 
-async function doDelFile(tareaId,fileId,proyId) {
+async function doDelFile(tareaId,fileId,proyId,faseId) {
   if(!confirm("¿Eliminar adjunto?")) return;
-  await api("deleteFile",{},{fileId,tareaId,proyId});
+  await api("deleteFile",{},{fileId,tareaId,proyId,faseId});
   toast("Adjunto eliminado.");
-  closeModal(); await reload(); render();
+  closeModal(); if(proyId) S.expProj[proyId]=true; await reload(); render();
 }
 
 // ── DELETE ────────────────────────────────
@@ -1238,10 +1500,14 @@ function restoreNotes() {
 
 function bindAll() {
   const fns={openModal,closeModal,setModalType,filterAssign,addAssign,removeAssign,
+    setAssignLeader,addNewPhase,removeNewPhase,updateNewPhase,
     doSaveNew,doEditTask,doEditProject,doSavePhaseEdit,setPendAct,setPendPhase,
     doSaveAct,doSavePhase,doSaveSupport,doSaveNote,doUpload,doDelFile,
-    doDelTask,doDelProj,toggleNote,toggleProj,toggleComp,setTab,setAV,pickWorker,
-    setAssignFile,initPasteZone,initPasteZoneAssign,removePasteHandler};
+    doDelTask,doDelProj,doDelFase,doUploadPhase,doSavePhaseSupport,
+    filterSupport,addSupportSel,removeSupportSel,
+    toggleNote,toggleProj,toggleComp,setTab,setAV,pickWorker,
+    setAssignFile,initPasteZone,initPasteZoneAssign,initPasteZonePhase,removePasteHandler,
+    guard};
   Object.entries(fns).forEach(([k,v])=>window[k]=v);
 }
 
